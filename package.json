@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-w-repeat",
   "description": "WillBot: Advanced repeating functions",
-  "version": "2.2.0",
+  "version": "2.2.3",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -22,7 +22,7 @@
   "dependencies": {
     "@satorijs/element": "^3.1.7",
     "dayjs": "^1.11.13",
-    "dedent": "^1.5.3",
+    "dedent": "^1.6.0",
     "pretty-format": "^29.7.0"
   },
   "devDependencies": {

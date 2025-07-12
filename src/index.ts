@@ -1,12 +1,12 @@
 import {
-    h, z,
-    Argv, Context, Session, SessionError,
-    $, Direction, Row, Query,
-    Fragment,
-    Dict,
-    Selection,
-    Awaitable,
-    Update
+  h, z,
+  Argv, Context, Session, SessionError,
+  $, Direction, Row, Query,
+  Fragment,
+  Dict,
+  Selection,
+  Awaitable,
+  Update
 } from 'koishi'
 import { type GuildMember } from '@satorijs/protocol'
 
@@ -22,117 +22,121 @@ import dayjs, { type Dayjs } from 'dayjs'
 export const name = 'w-repeat'
 
 export const inject = {
-    required: [ 'database' ],
-    optional: [ 'echarts', 'tesseract', 'jieba' ]
+  required: [ 'database' ],
+  optional: [ 'echarts', 'tesseract', 'jieba' ]
 }
 
 export interface RepeatSettings {
-    doWrite: boolean
+  doWrite: boolean
 
-    repeatCount: number
-    maxUnrelatedCount: number
+  repeatCount: number
+  maxUnrelatedCount: number
 
-    repeatBlacklist: string[]
+  repeatBlacklist: string[]
 
-    doProceedImage: boolean
-    enableOcr: boolean
+  doProceedImage: boolean
+  enableOcr: boolean
 
-    enableSegmentation: boolean
-    segmentationWordBlacklist: string[]
-    segmentationTagBlacklist: string[]
+  enableSegmentation: boolean
+  segmentationWordBlacklist: string[]
+  segmentationTagBlacklist: string[]
 }
 
 export const RepeatSettings: z<RepeatSettings> = z.object({
-    doWrite: z.boolean().default(true).description('是否启用复读写入（包括记录和机器人复读，不包括查询）'),
+  doWrite: z.boolean().default(true).description('是否启用复读写入（包括记录和机器人复读，不包括查询）'),
 
-    repeatCount: z.natural().default(0).description('机器人复读需要的次数，0 为不复读'),
-    maxUnrelatedCount: z.natural().default(5).description('恢复挂起的复读前允许的最大无关消息条数，0 为禁用挂起'),
+  repeatCount: z.natural().default(0).description('机器人复读需要的次数，0 为不复读'),
+  maxUnrelatedCount: z.natural().default(5).description('恢复挂起的复读前允许的最大无关消息条数，0 为禁用挂起'),
 
-    repeatBlacklist: z.array(z.string()).description('复读内容黑名单'),
+  repeatBlacklist: z.array(z.string()).description('复读内容黑名单'),
 
-    doProceedImage: z.boolean().default(false).description('是否处理图片（会使用较多数据库空间）'),
-    enableOcr: z.boolean().default(true).description('是否自动识别复读消息图片中文字'),
+  doProceedImage: z.boolean().default(false).description('是否处理图片（会使用较多数据库空间）'),
+  enableOcr: z.boolean().default(true).description('是否自动识别复读消息图片中文字'),
 
-    enableSegmentation: z.boolean().default(true).description('是否对复读消息分词'),
-    segmentationWordBlacklist: z.array(z.string()).description('复读词频统计中不显示的词'),
-    segmentationTagBlacklist: z.array(z.string()).description('复读词频统计中不显示的词性'),
+  enableSegmentation: z.boolean().default(true).description('是否对复读消息分词'),
+  segmentationWordBlacklist: z.array(z.string()).description('复读词频统计中不显示的词'),
+  segmentationTagBlacklist: z.array(z.string()).description('复读词频统计中不显示的词性'),
 })
 
 export interface Config {
-    displayLength: number
-    imageTextDisplayLength: number
-    displayPageSize: number
+  isPrepend: boolean
 
-    ocrLangs: string[]
+  displayLength: number
+  imageTextDisplayLength: number
+  displayPageSize: number
 
-    globalSettings: RepeatSettings
-    guildSettings: Record<string, RepeatSettings>
+  ocrLangs: string[]
+
+  globalSettings: RepeatSettings
+  guildSettings: Record<string, RepeatSettings>
 }
 
 export const Config: z<Config> = z.object({
-    globalSettings: RepeatSettings.description('全局复读设置'),
-    guildSettings: z.dict(RepeatSettings).description('群复读设置'),
+  isPrepend: z.boolean().default(false).description('是否注册为前置中间件'),
 
-    displayLength: z.natural().default(25).description('复读消息最大长度，超过则显示为省略号'),
-    imageTextDisplayLength: z.natural().default(15).description('图片文字预览最大长度，超过则显示为省略号'),
-    displayPageSize: z.natural().min(5).default(10).description('复读消息分页大小，至少为 5'),
+  globalSettings: RepeatSettings.description('全局复读设置'),
+  guildSettings: z.dict(RepeatSettings).description('群复读设置'),
 
-    ocrLangs: z.array(z.string()).default([ 'chi_sim', 'eng' ]).description('识别图片中文字时尝试的语言，参考 ' +
-        '<https://tesseract-ocr.github.io/tessdoc/Data-Files#data-files-for-version-400-november-29-2016>'
-    ),
+  displayLength: z.natural().default(25).description('复读消息最大长度，超过则显示为省略号'),
+  imageTextDisplayLength: z.natural().default(15).description('图片文字预览最大长度，超过则显示为省略号'),
+  displayPageSize: z.natural().min(5).default(10).description('复读消息分页大小，至少为 5'),
+
+  ocrLangs: z.array(z.string()).default([ 'chi_sim', 'eng' ]).description('识别图片中文字时尝试的语言，参考 ' +
+    '<https://tesseract-ocr.github.io/tessdoc/Data-Files#data-files-for-version-400-november-29-2016>'
+  ),
 })
 
 declare module 'koishi' {
-    interface Tables {
-        'w-repeat-record': RepeatRecord         // 复读记录表
-        'w-repeat-user': RepeatUser             // 复读用户表
-        'w-repeat-calendar': RepeatDay          // 复读日历
-        'w-repeat-word': RepeatWord             // 复读分词表
-    }
+  interface Tables {
+    'w-repeat-record': RepeatRecord     // 复读记录表
+    'w-repeat-user': RepeatUser       // 复读用户表
+    'w-repeat-calendar': RepeatDay      // 复读日历
+    'w-repeat-word': RepeatWord       // 复读分词表
+  }
 }
 
 export interface RepeatImage {
-    b64: string
-    text: string
+  b64: string
+  text: string
 }
 
 export interface RepeatMessage {
+  content?: string
+  images?: RepeatImage[]
+  words?: Tag[]
+  quote?: {
+    valid: boolean
     content?: string
-    images?: RepeatImage[]
-    words?: Tag[]
-    quote?: {
-        valid: boolean
-        content?: string
-        id?: string
-    }
+    id?: string
+  }
 }
 
 export interface RepeatRecordBase extends RepeatMessage {
-    gid: string
-    senders: string[]
-    startTime: number
-    endTime: number
-    interrupter: string
-    suspensions: RepeatSuspensionBase[]
+  gid: string
+  senders: string[]
+  startTime: number
+  endTime: number
+  interrupter: string
+  suspensions: RepeatSuspensionBase[]
 }
 
 export interface RepeatRecord extends RepeatRecordBase {
-    id: number
+  id: number
 }
 
 export interface RepeatSuspensionBase {
-    suspendTime: number
-    resumeTime: number
+  suspendTime: number
+  resumeTime: number
 }
 
 export interface RepeatWindow {
-    unrelatedCount: number
+  unrelatedCount: number
 }
 
 export interface RepeatSuspension extends RepeatSuspensionBase, RepeatWindow {}
 
 export interface Deletable {
-    deleted?: boolean
+  deleted?: boolean
 }
 
 export interface RepeatSuspendedRecord extends RepeatRecord, RepeatSuspension, Deletable {}
@@ -140,1521 +144,1525 @@ export interface RepeatSuspendedRecord extends RepeatRecord, RepeatSuspension, D
 export interface RepeatQueuedRecord extends RepeatRecordBase, RepeatWindow, Deletable {}
 
 export interface RepeatRuntime {
-    currentRec: RepeatQueuedRecord | RepeatSuspendedRecord
-    queuedRecs: RepeatQueuedRecord[]
-    suspendedRecs: RepeatSuspendedRecord[]
+  currentRec: RepeatQueuedRecord | RepeatSuspendedRecord
+  queuedRecs: RepeatQueuedRecord[]
+  suspendedRecs: RepeatSuspendedRecord[]
 }
 
 export interface RepeatUser {
-    uid: string
-    repeatTime: number
-    repeatCount: number
-    beRepeatedTime: number
-    beRepeatedCount: number
-    interruptTime: number
+  uid: string
+  repeatTime: number
+  repeatCount: number
+  beRepeatedTime: number
+  beRepeatedCount: number
+  interruptTime: number
 }
 
 export interface RepeatDay {
-    gid: string
-    month: string
-    day: string
-    topRepeaterId: string
-    topRepeaterCount: number
-    topStarterId: string
-    topStarterCount: number
-    topInterrupterId: string
-    topInterrupterCount: number
+  gid: string
+  month: string
+  day: string
+  topRepeaterId: string
+  topRepeaterCount: number
+  topStarterId: string
+  topStarterCount: number
+  topInterrupterId: string
+  topInterrupterCount: number
 }
 
 export interface RepeatWord {
-    gid: string
-    word: string
-    tag: string
-    count: number
+  gid: string
+  word: string
+  tag: string
+  count: number
 }
 
 export async function apply(ctx: Context, config: Config) {
-    // 扩展数据库模型
-    ctx.model.extend('w-repeat-record', {
-        id: 'unsigned',
-        gid: 'string',
-        content: 'text',
-        senders: {
-            type: 'array',
-            inner: 'string'
-        },
-        startTime: 'unsigned',
-        endTime: 'unsigned',
-        interrupter: 'string',
-        quote: {
-            type: 'object',
-            inner: {
-                valid: 'boolean',
-                content: 'string',
-                id: 'string'
-            }
-        },
-        images: {
-            type: 'array',
-            inner: {
-                type: 'object',
-                inner: {
-                    text: 'string',
-                    b64: 'string'
-                }
-            }
-        },
-        words: {
-            type: 'array',
-            inner: {
-                type: 'object',
-                inner: {
-                    tag: 'string',
-                    word: 'string'
-                }
-            }
-        },
-        suspensions: {
-            type: 'array',
-            inner: {
-                type: 'object',
-                inner: {
-                    suspendTime: 'unsigned',
-                    resumeTime: 'unsigned'
-                }
-            }
+  // 扩展数据库模型
+  ctx.model.extend('w-repeat-record', {
+    id: 'unsigned',
+    gid: 'string',
+    content: 'text',
+    senders: {
+      type: 'array',
+      inner: 'string'
+    },
+    startTime: 'unsigned',
+    endTime: 'unsigned',
+    interrupter: 'string',
+    quote: {
+      type: 'object',
+      inner: {
+        valid: 'boolean',
+        content: 'string',
+        id: 'string'
+      }
+    },
+    images: {
+      type: 'array',
+      inner: {
+        type: 'object',
+        inner: {
+          text: 'string',
+          b64: 'string'
         }
-    }, { autoInc: true })
-
-    const counterField = () => ({
-        type: 'unsigned',
-        initial: 0
-    } as const)
-    ctx.model.extend('w-repeat-user', {
-        uid: 'string',
-        repeatTime: counterField(),
-        repeatCount: counterField(),
-        beRepeatedTime: counterField(),
-        beRepeatedCount: counterField(),
-        interruptTime: counterField()
-    }, { primary: 'uid' })
-
-    ctx.model.extend('w-repeat-calendar', {
-        gid: 'string',
-        month: 'string',
-        day: 'string',
-        topRepeaterId: 'string',
-        topRepeaterCount: 'unsigned',
-        topStarterId: 'string',
-        topStarterCount: 'unsigned',
-        topInterrupterId: 'string',
-        topInterrupterCount: 'unsigned'
-    }, {
-        primary: [ 'gid', 'month', 'day' ]
-    })
-
-    ctx.model.extend('w-repeat-word', {
-        gid: 'string',
-        word: 'string',
-        tag: 'string',
-        count: 'unsigned'
-    }, {
-        primary: [ 'gid', 'word', 'tag' ]
-    })
-
-    // Tesseract 初始化
-
-    let tesseractWorker: Tesseract.Worker = undefined
-    const initTesseract = async () => {
-        try {
-            const { ocrLangs } = config
-            await ctx.tesseract.installNecessaryLangs(ocrLangs)
-            tesseractWorker = await ctx.tesseract.createWorker(ocrLangs)
-            ctx.logger.success('Inited Tesseract.')
+      }
+    },
+    words: {
+      type: 'array',
+      inner: {
+        type: 'object',
+        inner: {
+          tag: 'string',
+          word: 'string'
         }
-        catch (error) {
-            ctx.logger.info('Failed to init Tesseract: %o', error)
+      }
+    },
+    suspensions: {
+      type: 'array',
+      inner: {
+        type: 'object',
+        inner: {
+          suspendTime: 'unsigned',
+          resumeTime: 'unsigned'
         }
+      }
     }
+  }, { autoInc: true })
 
-    // Jieba 初始化
+  const counterField = () => ({
+    type: 'unsigned',
+    initial: 0
+  } as const)
+  ctx.model.extend('w-repeat-user', {
+    uid: 'string',
+    repeatTime: counterField(),
+    repeatCount: counterField(),
+    beRepeatedTime: counterField(),
+    beRepeatedCount: counterField(),
+    interruptTime: counterField()
+  }, { primary: 'uid' })
 
-    let jieba: Jieba = undefined
-    const initJieba = async () => {
-        try {
-            jieba = new ctx.jieba.Jieba
-            ctx.logger.success('Inited Jieba.')
+  ctx.model.extend('w-repeat-calendar', {
+    gid: 'string',
+    month: 'string',
+    day: 'string',
+    topRepeaterId: 'string',
+    topRepeaterCount: 'unsigned',
+    topStarterId: 'string',
+    topStarterCount: 'unsigned',
+    topInterrupterId: 'string',
+    topInterrupterCount: 'unsigned'
+  }, {
+    primary: [ 'gid', 'month', 'day' ]
+  })
+
+  ctx.model.extend('w-repeat-word', {
+    gid: 'string',
+    word: 'string',
+    tag: 'string',
+    count: 'unsigned'
+  }, {
+    primary: [ 'gid', 'word', 'tag' ]
+  })
+
+  // Tesseract 初始化
+
+  let tesseractWorker: Tesseract.Worker = undefined
+  const initTesseract = async () => {
+    if (! ctx.tesseract) return
+    try {
+      const { ocrLangs } = config
+      await ctx.tesseract.installNecessaryLangs(ocrLangs)
+      tesseractWorker = await new Promise(async (res, rej) => res(ctx.tesseract.createWorker(ocrLangs, {
+        errorHandler: (err) => rej(err)
+      })))
+      ctx.logger.success('Inited Tesseract.')
+    }
+    catch (error) {
+      ctx.logger.info('Failed to init Tesseract: %o', error)
+    }
+  }
+
+  // Jieba 初始化
+
+  let jieba: Jieba = undefined
+  const initJieba = async () => {
+    if (! ctx.jieba) return
+    try {
+      jieba = new ctx.jieba.Jieba
+      ctx.logger.success('Inited Jieba.')
+    }
+    catch (error) {
+      ctx.logger.info('Failed to init Jieba: %o', error)
+    }
+  }
+
+  // 等待所有初始化完成
+
+  await Promise.all([
+    initTesseract(),
+    initJieba()
+  ])
+
+  // 工具函数
+  // 配置
+  const getGuildSettings = (gid: string) => config.guildSettings[gid] ?? config.globalSettings
+
+  // String
+  const ellipsis = (s: string, maxLength: number): string => {
+    const els = h.parse(s)
+    let length = 0
+    let output = ''
+    for (const el of els) {
+      if (el.type === 'text') {
+        const text = el.toString()
+        length += text.length
+        if (length > maxLength) {
+          output += text.slice(0, text.length - (length - maxLength) - 3) + '...'
+          break
         }
-        catch (error) {
-            ctx.logger.info('Failed to init Jieba: %o', error)
-        }
+        output += text
+      }
+      else output += el.toString() // TODO: length of other elements
     }
+    return output
+  }
 
-    // 等待所有初始化完成
+  const capitalize = <S extends string>(s: S): Capitalize<S> =>
+    (s[0].toUpperCase() + s.slice(1)) as any
 
-    await Promise.all([
-        initTesseract(),
-        initJieba()
-    ])
+  const timeText = (time: number) => dayjs(time).format('YYYY/MM/DD HH:mm:ss')
 
-    // 工具函数
-    // 配置
-    const getGuildSettings = (gid: string) => config.guildSettings[gid] ?? config.globalSettings
+  const splitWithLimit = (s: string, delimiter: string, limit: number) => {
+    const segs = s.split(delimiter)
+    const initSegs = segs.slice(0, limit - 1)
+    const lastSeg = segs.slice(limit - 1).join(delimiter)
+    return [ ...initSegs, lastSeg ]
+  }
 
-    // String
-    const ellipsis = (s: string, maxLength: number): string => {
-        const els = h.parse(s)
-        let length = 0
-        let output = ''
-        for (const el of els) {
-            if (el.type === 'text') {
-                const text = el.toString()
-                length += text.length
-                if (length > maxLength) {
-                    output += text.slice(0, text.length - (length - maxLength) - 3) + '...'
-                    break
-                }
-                output += text
-            }
-            else output += el.toString() // TODO: length of other elements
-        }
-        return output
+  // Array
+  const maybeArray = <T>(x: T | T[]): T[] => Array.isArray(x) ? x : [ x ]
+
+  const countBy = <T extends {}, K extends keyof any>(xs: T[], key: (x: T) => K | K[]) =>
+    xs.reduce<Record<keyof any, number>>((dict, x) => {
+      maybeArray(key(x)).forEach(k => {
+        dict[k] ??= 0
+        dict[k] ++
+      })
+      return dict
+    }, {})
+
+  const elem = <T, U extends T>(x: T, xs: U[]): x is U => xs.includes(x as any)
+
+  const countAndSortBy = <T extends {}, K extends keyof any>(xs: T[], key: (x: T) => K | K[]) =>
+    Object.entries(countBy(xs, key)).sort(([, count1 ], [, count2 ]) => count2 - count1)
+
+  const exclude = <T>(xs: T[], ys: T[]): T[] => {
+    const yset = new Set(ys)
+    return xs.filter(x => ! yset.has(x))
+  }
+
+  // Dict
+  const pick = <T extends {}, K extends keyof T>(x: T, keys: K[]): Pick<T, K> =>
+    Object.fromEntries(Object.entries(x).filter(([ k ]) => keys.includes(k as any))) as any
+
+  const omit = <T extends {}, K extends keyof T>(x: T, keys: K[]): Omit<T, K> =>
+    Object.fromEntries(Object.entries(x).filter(([ k ]) => ! keys.includes(k as any))) as any
+
+  const pickOr = <T extends {}, K extends keyof T>(x: T, keys: K[]): [ Pick<T, K>, Omit<T, K> ] => {
+    const xPick = {} as Pick<T, K>
+    const xOmit = {} as Omit<T, K>
+    Object.keys(x).forEach(k => (keys.includes(k as any) ? xPick : xOmit)[k] = x[k])
+    return [ xPick, xOmit ]
+  }
+
+  const safeInc = <K extends keyof any>(o: Record<K, number>) => (k: K) => {
+    o[k] ??= 0
+    o[k] ++
+  }
+
+  // Promise
+  const unzipPromise = async <T, U>(p: Promise<readonly [T, U][]>) => {
+    const xs: T[] = [], ys: U[] = []
+    for (const [ x, y ] of await p) {
+      xs.push(x)
+      ys.push(y)
     }
+    return [ xs, ys ] as const
+  }
 
-    const capitalize = <S extends string>(s: S): Capitalize<S> =>
-        (s[0].toUpperCase() + s.slice(1)) as any
+  // Date
+  const getDaysOfMonth = (date: Dayjs = dayjs()) => {
+    const days: string[] = []
+    const month = date.get('month')
+    for (let day = date.startOf('month'); day.get('month') === month; day = day.add(1, 'day'))
+      days.push(day.format('DD'))
+    return days
+  }
 
-    const timeText = (time: number) => dayjs(time).format('YYYY/MM/DD HH:mm:ss')
+  const removeUndefined = <const T>(x: T): T => {
+    for (const k in x) if (x[k] === undefined) delete x[k]
+    return x
+  }
 
-    const splitWithLimit = (s: string, delimiter: string, limit: number) => {
-        const segs = s.split(delimiter)
-        const initSegs = segs.slice(0, limit - 1)
-        const lastSeg = segs.slice(limit - 1).join(delimiter)
-        return [ ...initSegs, lastSeg ]
+  // Adapter
+  const getMemberDict = async (session: Session, guildId: string) => {
+    const { data: memberList } = await session.bot.getGuildMemberList(guildId)
+    const dict: Record<string, GuildMember> = {}
+    for (const member of memberList)
+      dict[`${session.platform}:${member.user.id}`] = member
+    return dict
+  }
+
+  const getMemberName = (memberDict: Record<string, GuildMember>, uid: string) => {
+    const member = memberDict?.[uid]
+    return member ? (member.nick || member.name || member.user.name || member.user.id) : uid
+  }
+
+  // Command
+  const requireList = (): Argv.OptionConfig => ({
+    conflictsWith: { option: 'list', value: false }
+  })
+
+  const profile = async (fn: () => Awaitable<void | Fragment>): Promise<Fragment> => {
+    const start = Date.now()
+    const res = await fn()
+    const time = Date.now() - start
+    return `${res ?? ''}\n\n用时 ${time > 2000
+      ? (time * .001).toFixed(3) + 's'
+      : time.toFixed(3) + 'ms'
+    }`
+  }
+
+  // Database
+  const getReserveProjection = <S>(fields: (keyof S)[]): {
+    [K in keyof S]: (row: Row<S>) => Row<S>[K]
+  } => Object.fromEntries(fields.map(name => [ name, (row: Row<S>) => row[name] ])) as any
+
+  const parseDuration = (duration: string): Query<RepeatRecord> & object => {
+    if (duration === 'all') return {}
+    else if (elem(duration, [ 'hour', 'day', 'week', 'month' ] as const)) return {
+      startTime: { $gte: + dayjs().startOf(duration) }
     }
+    else if (duration.includes('~')) {
+      const [ start, end ] = duration
+        .split('~')
+        .map(str => {
+          str = str.trim()
+          if (! str) return undefined
 
-    // Array
-    const maybeArray = <T>(x: T | T[]): T[] => Array.isArray(x) ? x : [ x ]
-
-    const countBy = <T extends {}, K extends keyof any>(xs: T[], key: (x: T) => K | K[]) =>
-        xs.reduce<Record<keyof any, number>>((dict, x) => {
-            maybeArray(key(x)).forEach(k => {
-                dict[k] ??= 0
-                dict[k] ++
-            })
-            return dict
-        }, {})
-
-    const elem = <T, U extends T>(x: T, xs: U[]): x is U => xs.includes(x as any)
-
-    const countAndSortBy = <T extends {}, K extends keyof any>(xs: T[], key: (x: T) => K | K[]) =>
-        Object.entries(countBy(xs, key)).sort(([, count1 ], [, count2 ]) => count2 - count1)
-
-    const exclude = <T>(xs: T[], ys: T[]): T[] => {
-        const yset = new Set(ys)
-        return xs.filter(x => ! yset.has(x))
-    }
-
-    // Dict
-    const pick = <T extends {}, K extends keyof T>(x: T, keys: K[]): Pick<T, K> =>
-        Object.fromEntries(Object.entries(x).filter(([ k ]) => keys.includes(k as any))) as any
-
-    const omit = <T extends {}, K extends keyof T>(x: T, keys: K[]): Omit<T, K> =>
-        Object.fromEntries(Object.entries(x).filter(([ k ]) => ! keys.includes(k as any))) as any
-
-    const pickOr = <T extends {}, K extends keyof T>(x: T, keys: K[]): [ Pick<T, K>, Omit<T, K> ] => {
-        const xPick = {} as Pick<T, K>
-        const xOmit = {} as Omit<T, K>
-        Object.keys(x).forEach(k => (keys.includes(k as any) ? xPick : xOmit)[k] = x[k])
-        return [ xPick, xOmit ]
-    }
-
-    const safeInc = <K extends keyof any>(o: Record<K, number>) => (k: K) => {
-        o[k] ??= 0
-        o[k] ++
-    }
-
-    // Promise
-    const unzipPromise = async <T, U>(p: Promise<readonly [T, U][]>) => {
-        const xs: T[] = [], ys: U[] = []
-        for (const [ x, y ] of await p) {
-            xs.push(x)
-            ys.push(y)
-        }
-        return [ xs, ys ] as const
-    }
-
-    // Date
-    const getDaysOfMonth = (date: Dayjs = dayjs()) => {
-        const days: string[] = []
-        const month = date.get('month')
-        for (let day = date.startOf('month'); day.get('month') === month; day = day.add(1, 'day'))
-            days.push(day.format('DD'))
-        return days
-    }
-
-    const removeUndefined = <const T>(x: T): T => {
-        for (const k in x) if (x[k] === undefined) delete x[k]
-        return x
-    }
-
-    // Adapter
-    const getMemberDict = async (session: Session, guildId: string) => {
-        const { data: memberList } = await session.bot.getGuildMemberList(guildId)
-        const dict: Record<string, GuildMember> = {}
-        for (const member of memberList)
-            dict[`${session.platform}:${member.user.id}`] = member
-        return dict
-    }
-
-    const getMemberName = (memberDict: Record<string, GuildMember>, uid: string) => {
-        const member = memberDict?.[uid]
-        return member ? (member.nick || member.name || member.user.name || member.user.id) : uid
-    }
-
-    // Command
-    const requireList = (): Argv.OptionConfig => ({
-        conflictsWith: { option: 'list', value: false }
-    })
-
-    const profile = async (fn: () => Awaitable<void | Fragment>): Promise<Fragment> => {
-        const start = Date.now()
-        const res = await fn()
-        const time = Date.now() - start
-        return `${res ?? ''}\n\n用时 ${time > 2000
-            ? (time * .001).toFixed(3) + 's'
-            : time.toFixed(3) + 'ms'
-        }`
-    }
-
-    // Database
-    const getReserveProjection = <S>(fields: (keyof S)[]): {
-        [K in keyof S]: (row: Row<S>) => Row<S>[K]
-    } => Object.fromEntries(fields.map(name => [ name, (row: Row<S>) => row[name] ])) as any
-
-    const parseDuration = (duration: string): Query<RepeatRecord> & object => {
-        if (duration === 'all') return {}
-        else if (elem(duration, [ 'hour', 'day', 'week', 'month' ] as const)) return {
-            startTime: { $gte: + dayjs().startOf(duration) }
-        }
-        else if (duration.includes('~')) {
-            const [ start, end ] = duration
-                .split('~')
-                .map(str => {
-                    str = str.trim()
-                    if (! str) return undefined
-
-                    const date = dayjs(str)
-                    if (! date.isValid()) throw new SessionError(`'${str}' 不是有效的时间`)
-                    return date
-                })
-            return {
-                startTime: start ? { $gte: + start } : {},
-                endTime: end ? { $lte: + end } : {}
-            }
-        }
-        throw new SessionError(`'${duration}' 不是有效的时间范围`)
-    }
-
-    const $inc = (expr: $.Expr) => $.add(expr, 1)
-
-    // Stream
-    const streamToBuffer = async (stream: ReadableStream<Uint8Array>): Promise<Buffer> => {
-        const buffers: Uint8Array[] = []
-        for await (const data of stream) buffers.push(data)
-        return Buffer.concat(buffers)
-    }
-
-    // Repeat
-    const isSameImages = (images1: RepeatImage[], images2: RepeatImage[]): boolean =>
-            ! new Set([ ...images1, ...images2 ]).has(null)
-        &&  images1.length === images2.length
-        &&  images1.every((b1, i) => b1.b64 === images2[i].b64)
-
-    const isSameMessage = (message1: RepeatMessage, message2: RepeatMessage) =>
-            message1 && message2
-        &&  message1.content === message2.content
-        &&  isSameImages(message1.images ?? [], message2.images ?? [])
-
-    const updateImageText = async (rec: RepeatRecord | RepeatQueuedRecord) => {
-        const { images } = rec
-
-        await Promise.all(images.filter(x => x !== null).map(async ({ b64 }, i) => {
-            const res = await tesseractWorker.recognize(Buffer.from(b64, 'base64'))
-            const { text } = res.data
-            images[i].text = text
-        }))
-
-        if ('id' in rec) await ctx.database.set('w-repeat-record', { id: rec.id }, { images })
-    }
-
-    const updateWords = async (rec: RepeatRecord | RepeatQueuedRecord) => {
-        const text = h.transform(
-            rec.content.replace(/@__KOISHI_IMG__@/g, ''),
-            el => el.type === 'text' ? el.toString() : ''
-        )
-        const words = rec.words = jieba
-            .tag(text)
-
-        if ('id' in rec) await ctx.database.set('w-repeat-record', { id: rec.id }, { words })
-
-        return words
-    }
-
-    const createCurrentRec = (gid: string): RepeatQueuedRecord => ({
-        gid,
-        content: undefined,
-        images: undefined,
-        quote: undefined,
-        senders: undefined,
-        startTime: undefined,
-        endTime: undefined,
-        interrupter: undefined,
-        suspensions: [],
-        unrelatedCount: 0
-    })
-
-    const updateRecQuote = (session: Session, rec: RepeatQueuedRecord) => {
-        if (! session.quote) return
-        if (! rec.quote) {
-            rec.quote = {
-                valid: true,
-                ...pick(session.quote, [ 'id', 'content' ])
-            }
-            return
-        }
-        if (! rec.quote.valid) return
-        if (rec.quote.id === session.quote.id) return
-        rec.quote = {
-            valid: false
-        }
-    }
-
-    const unescapeMessage = (
-        message: RepeatMessage,
-        {
-            allowImage = true,
-            allowFace = true
-        }: {
-            allowImage?: boolean,
-            allowFace?: boolean
-        } = {}
-    ): string => {
-        let imageIdx = 0
-        let content = message.content.replace(
-            /@__KOISHI_IMG__@/g,
-            () => {
-                const image = message.images[imageIdx ++]
-                return allowImage
-                    ? h.img('data:image/png;base64,' + image.b64).toString()
-                    : `[图片${ image.text ? ': ' + image.text.replace(/\s+/g, ' ') : '' }]`
-            }
-        )
-        content = h.transform(content, {
-            face: allowFace ? undefined : () => '[表情]'
+          const date = dayjs(str)
+          if (! date.isValid()) throw new SessionError(`'${str}' 不是有效的时间`)
+          return date
         })
-        return content
+      return {
+        startTime: start ? { $gte: + start } : {},
+        endTime: end ? { $lte: + end } : {}
+      }
     }
+    throw new SessionError(`'${duration}' 不是有效的时间范围`)
+  }
 
-    // 复读中间件
-    const runtimes: Record<string, RepeatRuntime> = {}
-    ctx.middleware(async (session, next) => {
-        // 只处理群内消息
-        const { content: originalContent, gid, uid } = session
-        if (! session.guildId) return next()
+  const $inc = (expr: $.Expr) => $.add(expr, 1)
 
-        // 依次检查群和全局是否启用复读
-        const settings = getGuildSettings(gid)
-        if (gid in config.guildSettings) {
-            if (! config.guildSettings[gid]) return next()
+  // Stream
+  const streamToBuffer = async (stream: ReadableStream<Uint8Array>): Promise<Buffer> => {
+    const buffers: Uint8Array[] = []
+    for await (const data of stream) buffers.push(data)
+    return Buffer.concat(buffers)
+  }
+
+  // Repeat
+  const isSameImages = (images1: RepeatImage[], images2: RepeatImage[]): boolean =>
+      ! new Set([ ...images1, ...images2 ]).has(null)
+    &&  images1.length === images2.length
+    &&  images1.every((b1, i) => b1.b64 === images2[i].b64)
+
+  const isSameMessage = (message1: RepeatMessage, message2: RepeatMessage) =>
+      message1 && message2
+    &&  message1.content === message2.content
+    &&  isSameImages(message1.images ?? [], message2.images ?? [])
+
+  const updateImageText = async (rec: RepeatRecord | RepeatQueuedRecord) => {
+    const { images } = rec
+
+    await Promise.all(images.filter(x => x !== null).map(async ({ b64 }, i) => {
+      const res = await tesseractWorker.recognize(Buffer.from(b64, 'base64'))
+      const { text } = res.data
+      images[i].text = text
+    }))
+
+    if ('id' in rec) await ctx.database.set('w-repeat-record', { id: rec.id }, { images })
+  }
+
+  const updateWords = async (rec: RepeatRecord | RepeatQueuedRecord) => {
+    const text = h.transform(
+      rec.content.replace(/@__KOISHI_IMG__@/g, ''),
+      el => el.type === 'text' ? el.toString() : ''
+    )
+    const words = rec.words = jieba
+      .tag(text)
+
+    if ('id' in rec) await ctx.database.set('w-repeat-record', { id: rec.id }, { words })
+
+    return words
+  }
+
+  const createCurrentRec = (gid: string): RepeatQueuedRecord => ({
+    gid,
+    content: undefined,
+    images: undefined,
+    quote: undefined,
+    senders: undefined,
+    startTime: undefined,
+    endTime: undefined,
+    interrupter: undefined,
+    suspensions: [],
+    unrelatedCount: 0
+  })
+
+  const updateRecQuote = (session: Session, rec: RepeatQueuedRecord) => {
+    if (! session.quote) return
+    if (! rec.quote) {
+      rec.quote = {
+        valid: true,
+        ...pick(session.quote, [ 'id', 'content' ])
+      }
+      return
+    }
+    if (! rec.quote.valid) return
+    if (rec.quote.id === session.quote.id) return
+    rec.quote = {
+      valid: false
+    }
+  }
+
+  const unescapeMessage = (
+    message: RepeatMessage,
+    {
+      allowImage = true,
+      allowFace = true
+    }: {
+      allowImage?: boolean,
+      allowFace?: boolean
+    } = {}
+  ): string => {
+    let imageIdx = 0
+    let content = message.content.replace(
+      /@__KOISHI_IMG__@/g,
+      () => {
+        const image = message.images[imageIdx ++]
+        return allowImage
+          ? h.img('data:image/png;base64,' + image.b64).toString()
+          : `[图片${ image.text ? ': ' + image.text.replace(/\s+/g, ' ') : '' }]`
+      }
+    )
+    content = h.transform(content, {
+      face: allowFace ? undefined : () => '[表情]'
+    })
+    return content
+  }
+
+  // 复读中间件
+  const runtimes: Record<string, RepeatRuntime> = {}
+  ctx.middleware(async (session, next) => {
+    // 只处理群内消息
+    const { content: originalContent, gid, uid } = session
+    if (! session.guildId) return next()
+
+    // 依次检查群和全局是否启用复读
+    const settings = getGuildSettings(gid)
+    if (gid in config.guildSettings) {
+      if (! config.guildSettings[gid]) return next()
+    }
+    else if (! settings.doWrite) return next()
+
+    // 过滤内容黑名单
+    if (settings.repeatBlacklist.some(re => new RegExp(re).test(originalContent)))
+      return next()
+
+    // 解析消息，处理图片
+    const imageSrcs: string[] = []
+    const content = h
+      .parse(originalContent)
+      .map(el => {
+        if (settings.doProceedImage && el.type === 'img') {
+          const src = el.attrs.src as string
+          imageSrcs.push(src)
+          return '@__KOISHI_IMG__@'
         }
-        else if (! settings.doWrite) return next()
-
-        // 过滤内容黑名单
-        if (settings.repeatBlacklist.some(re => new RegExp(re).test(originalContent)))
-            return next()
-
-        // 解析消息，处理图片
-        const imageSrcs: string[] = []
-        const content = h
-            .parse(originalContent)
-            .map(el => {
-                if (settings.doProceedImage && el.type === 'img') {
-                    const src = el.attrs.src as string
-                    imageSrcs.push(src)
-                    return '@__KOISHI_IMG__@'
-                }
-                return el.toString()
-            })
-            .join('')
-        const images: RepeatImage[] = await Promise.all(imageSrcs.map(async src => {
-            try {
-                const res = await fetch(src)
-                const buffer = await streamToBuffer(res.body)
-                return {
-                    b64: buffer.toString('base64'),
-                    text: ''
-                }
-            }
-            catch (err) {
-                ctx.logger.error('Failed download image <%s>, %o', src, err)
-                return null
-            }
-        }))
-
-        // 定义当前消息：内容和图片
-        const thisMessage: RepeatMessage = { content, images }
-
-        // 获取本群复读运行时，若无则创建
-        const runtime = runtimes[gid] ??= {
-            currentRec: undefined,
-            queuedRecs: [],
-            suspendedRecs: []
+        return el.toString()
+      })
+      .join('')
+    const images: RepeatImage[] = await Promise.all(imageSrcs.map(async src => {
+      try {
+        const res = await fetch(src)
+        const buffer = await streamToBuffer(res.body)
+        return {
+          b64: buffer.toString('base64'),
+          text: ''
         }
-        let { currentRec } = runtime
+      }
+      catch (err) {
+        ctx.logger.error('Failed to download image <%s>, %s', src, err instanceof Error ? err.stack : err)
+        return null
+      }
+    }))
 
-        // 判断当前消息是否为复读（即和当前复读内容相同）
-        const isRepeating = isSameMessage(thisMessage, currentRec)
+    // 定义当前消息：内容和图片
+    const thisMessage: RepeatMessage = { content, images }
 
-        // 处理某类复读
-        const procRecs = async <K extends 'suspendedRecs' | 'queuedRecs'>(
-            recsName: K,
-            onSame: (rec: RepeatRuntime[K][number]) => Promise<void>
-        ) => {
-            await Promise.all(runtime[recsName].map(async (rec: RepeatRuntime[K][number]) => {
-                // 当前消息与挂起复读内容相同
-                if (isSameMessage(thisMessage, rec)) {
-                    // 讲当前用户添加到复读发送者（暂不区分挂起状态、未激活状态下的发送者）
-                    rec.senders.push(uid)
-                    // 更新回复
-                    updateRecQuote(session, rec)
-                    // 重置无关消息计数器
-                    rec.unrelatedCount = 0
-                    // 调用相同消息处理函数
-                    await onSame(rec)
-                }
-                else {
-                    // 增加无关消息计数器
-                    const count = ++ rec.unrelatedCount
-                    // 如果无关消息多于阈值，将该复读标记为删除
-                    if (count > settings.maxUnrelatedCount) rec.deleted = true
-                }
-            }))
-            // 清理标记删除的复读
-            runtime[recsName] = runtime[recsName].filter(rec => ! rec.deleted) as RepeatRuntime[K]
-        }
+    // 获取本群复读运行时，若无则创建
+    const runtime = runtimes[gid] ??= {
+      currentRec: undefined,
+      queuedRecs: [],
+      suspendedRecs: []
+    }
+    let { currentRec } = runtime
 
-        let isNewRec = true 
+    // 判断当前消息是否为复读（即和当前复读内容相同）
+    const isRepeating = isSameMessage(thisMessage, currentRec)
 
-        // 处理挂起的复读
-        await procRecs('suspendedRecs', async rec => {
-            // 如果当前消息构成复读，则恢复挂起的复读
-            if (isRepeating) {
-                // 将挂起的复读记录分离为挂起信息和恢复的复读
-                const [ suspension, resumed ] = pickOr(rec, [ 'suspendTime', 'resumeTime' ])
-                // 添加挂起信息到恢复的复读中
-                resumed.suspensions.push({
-                    ...pick(suspension, [ 'suspendTime' ]),
-                    resumeTime: Date.now()
-                })
-                // 将挂起的复读移出复读记录表，并标记从运行时中删除
-                await ctx.database.remove('w-repeat-record', resumed.id)
-                rec.deleted = true
-
-                // 用恢复的复读替换当前复读
-                isNewRec = false
-                runtime.currentRec = omit(resumed, [ 'id' ])
-            }
-        })
-
-        // 如果发生复读
-        if (isRepeating) {
-            // 将当前用户加入运行时的发送者列表中
-            currentRec.senders.push(uid)
-            // 更新回复
-            updateRecQuote(session, currentRec)
-        }
-        // 当前复读的复读条数，大于 1 则为完整复读
-        const repeatCount = currentRec?.senders?.length ?? 0
-
-        // 如果发生了复读
-        if (isRepeating) {
-            // 如果是完整复读，则更新用户复读数据
-            if (repeatCount > 1) await Promise.all([
-                // 更新当前用户的复读数据
-                ctx.database.upsert('w-repeat-user', row => [{
-                    uid,
-                    repeatCount: $inc(row.repeatTime),
-                    repeatTime: currentRec.senders.slice(0, -1).includes(uid)
-                        ? undefined
-                        : $inc(row.repeatTime)
-                }]),
-                // 更新复读发起者的复读数据
-                ctx.database.upsert('w-repeat-user', row => [{
-                    uid: currentRec.senders[0],
-                    beRepeatedCount: $inc(row.beRepeatedCount),
-                    beRepeatedTime: currentRec.senders.length === 2
-                        ? $inc(row.beRepeatedTime)
-                        : undefined
-                }])
-            ])
+    // 处理某类复读
+    const procRecs = async <K extends 'suspendedRecs' | 'queuedRecs'>(
+      recsName: K,
+      onSame: (rec: RepeatRuntime[K][number]) => Promise<void>
+    ) => {
+      await Promise.all(runtime[recsName].map(async (rec: RepeatRuntime[K][number]) => {
+        // 当前消息与挂起复读内容相同
+        if (isSameMessage(thisMessage, rec)) {
+          // 讲当前用户添加到复读发送者（暂不区分挂起状态、未激活状态下的发送者）
+          rec.senders.push(uid)
+          // 更新回复
+          updateRecQuote(session, rec)
+          // 重置无关消息计数器
+          rec.unrelatedCount = 0
+          // 调用相同消息处理函数
+          await onSame(rec)
         }
         else {
-            // 处理未激活的复读
-            await procRecs('queuedRecs', async rec => {
-                // 用新激活的复读替换当前复读
-                isNewRec = false
-                currentRec = runtime.currentRec = rec
-            })
-
-            // 如果当前复读是完整复读（即发送人数大于 1），则被打断
-            if (repeatCount > 1) {
-                // 记录打断者和复读结束时间
-                currentRec.interrupter = uid
-                currentRec.endTime = Date.now()
-
-                const [ old ] = await Promise.all([
-                    // 将运行时作为新复读记录写入复读记录表
-                    ctx.database.create('w-repeat-record', omit(currentRec, [ 'unrelatedCount' ])),
-                    // 更新打断者复读用户数据
-                    ctx.database.upsert('w-repeat-user', row => [{
-                        uid,
-                        interruptTime: $inc(row.interruptTime)
-                    }]),
-                    // 识别图片中文字
-                    (settings.enableOcr && tesseractWorker) ? updateImageText(currentRec) : undefined,
-                    // 分词
-                    (settings.enableSegmentation && jieba) ? updateWords(currentRec) : undefined
-                ])
-
-                // 如果允许挂起，挂起被打断的复读
-                if (settings.maxUnrelatedCount && old.senders.length > 1) {
-                    runtime.suspendedRecs.unshift({
-                        ...old,
-                        unrelatedCount: 1,
-                        suspendTime: Date.now(),
-                        resumeTime: undefined
-                    })
-                }
-            }
-
-            // 如果需要新建当前复读
-            if (isNewRec) {
-                // 新建当前复读，包含内容、图片、开始时间、第一个发送者的信息
-                runtime.currentRec = currentRec = {
-                    ...createCurrentRec(gid),
-                    content,
-                    images,
-                    startTime: session.timestamp,
-                    senders: [ uid ],
-                }
-                updateRecQuote(session, currentRec)
-                // 滚动复读队列
-                runtime.queuedRecs.unshift(currentRec)
-            }
+          // 增加无关消息计数器
+          const count = ++ rec.unrelatedCount
+          // 如果无关消息多于阈值，将该复读标记为删除
+          if (count > settings.maxUnrelatedCount) rec.deleted = true
         }
+      }))
+      // 清理标记删除的复读
+      runtime[recsName] = runtime[recsName].filter(rec => ! rec.deleted) as RepeatRuntime[K]
+    }
 
-        // 机器人复读
-        if (currentRec.senders.length === settings.repeatCount) {
-            return h('as-forward', { level: 'never' }, [
-                currentRec.quote?.valid ? h.quote(currentRec.quote.id) : '',
-                ...h.parse(unescapeMessage(currentRec))
-            ])
-        }
+    let isNewRec = true 
 
-        // 传向下一个中间件
-        return next()
-    }, true)
-
-    // 复读指令
-    ctx.command('repeat', '群复读功能')
-
-    ctx.command('repeat.user [user:user]', '查看用户复读统计')
-        .action(async ({ session }, uid) => {
-            const [ user ] = await ctx.database.get('w-repeat-user', { uid: uid || session.uid })
-            if (! user) return `还没有复读统计`
-            return dedent`
-                复读条数：　　${user.repeatCount}
-                复读次数：　　${user.repeatTime}
-                被复读条数：　${user.beRepeatedCount}
-                被复读次数：　${user.beRepeatedTime}
-                打断复读次数：${user.interruptTime}
-            `
+    // 处理挂起的复读
+    await procRecs('suspendedRecs', async rec => {
+      // 如果当前消息构成复读，则恢复挂起的复读
+      if (isRepeating) {
+        // 将挂起的复读记录分离为挂起信息和恢复的复读
+        const [ suspension, resumed ] = pickOr(rec, [ 'suspendTime', 'resumeTime' ])
+        // 添加挂起信息到恢复的复读中
+        resumed.suspensions.push({
+          ...pick(suspension, [ 'suspendTime' ]),
+          resumeTime: Date.now()
         })
-
-    ctx.command('repeat.stat', '查看群复读统计')
-        .alias('repeat.s')
-        .alias('repeat.guild')
-        .option('guild', '-g <guild:channel> 指定群（默认为本群）', {
-            conflictsWith: { option: 'global', value: true }
-        })
-        .option('global', '-G 指定群（默认为本群）')
-        .option('duration',
-            '-d <duration:string> 指定时间范围。可以为 hour/day/week/month/all，或者用波浪号（~）分割的开始、结束时间',
-            { fallback: 'day' }
-        )
-        .option('page', '-p <page:posint> 查看分页', { fallback: 1 })
-        .option('list', '-l 显示复读记录列表', { fallback: true })
-        .option('list', '-L 不显示复读记录列表', { value: false })
-        .option('top', '-t <top:natural> 排行榜人数', { fallback: 1 })
-        .option('filter', '-f <content:string> 根据查找复读记录', requireList())
-        .option('image', '-i 查找包含图片的复读记录', requireList())
-        .option('starter', '--us <user:user> 根据发起者查找（默认为自己）', requireList())
-        .option('repeater', '--ur <user:user> 根据参与者查找（默认为自己）', requireList())
-        .option('interrupter', '--ui <user:user> 根据打断者查找（默认为自己）', requireList())
-        .option('jsfilter', '-j <code:string>', {
-            authority: 4,
-            conflictsWith: [ 'filter', { option: 'list', value: false } ]
-        })
-        .option('sort', '-s <sortby> 指定排序方式', { type: /^(count|tps|startTime)?(:(desc|asc))?$/, fallback: 'count' })
-        .action(async ({ session, options }) => {
-            const { global: isGlobal, jsfilter, top: topNum, duration } = options
-            let { guild: gid } = options
-            if (! session.guildId && ! options.guild && ! isGlobal) return '请在群内调用'
-            if (! isGlobal) gid ||= session.gid
-
-            const [ sortMethod = 'count', sortDirection = 'desc' ] = options.sort.split(':') as [
-                'count' | 'tps' | 'length' | 'startTime', Direction
-            ]
-            const isFiltered = ([ 'filter', 'starter', 'repeater', 'interrupter' ] satisfies (keyof typeof options)[])
-                .some(name => name in options)
-
-            // TODO: wait for row destruction
-            const reserveProjection = getReserveProjection<RepeatRecord>([
-                'id', 'gid', 'content', 'senders', 'startTime', 'endTime', 'interrupter', 'images'
-            ])
-
-            let recs = await ctx.database
-                .select('w-repeat-record')
-                .where(row => $.query(row, {
-                    gid: isGlobal ? {} : gid,
-                    ...parseDuration(duration)
-                }, $.and(
-                    options.filter
-                        ? $.regex(row.content, options.filter)
-                        : true,
-                    options.starter
-                        ? $.eq($.get(row.senders, 0), options.starter)
-                        : true,
-                    options.repeater
-                        ? $.in(options.repeater, row.senders)
-                        : true,
-                    options.interrupter
-                        ? $.eq(row.interrupter, options.interrupter)
-                        : true,
-                    options.image
-                        ? $.gt($.length(row.images), 0)
-                        : true
-                )))
-                .project({
-                    ...reserveProjection,
-                    count: row => $.length(row.senders)
-                })
-                .project(removeUndefined({
-                    ...reserveProjection,
-                    count: row => row.count,
-                    tps: sortMethod === 'tps'
-                        ? row => $.mul($.div(row.count, $.sub(row.endTime, row.startTime)), 1000)
-                        : undefined
-                } satisfies Dict<Selection.Callback<RepeatRecord & { count: number }>>))
-                .orderBy(sortMethod as any, sortDirection)
-                .execute()
-
-            if (jsfilter) recs = recs.filter(eval(jsfilter))
-
-            const topInterrupters = countAndSortBy(recs, rec => rec.interrupter)
-            const topStarters = countAndSortBy(recs, rec => rec.senders[0])
-            const topRepeaters = countAndSortBy(recs, rec => rec.senders)
-
-            const memberDict = isGlobal ? null : await getMemberDict(session, gid.split(':')[1])
-
-            const topText = (action: string, tops: [string, number][]) => dedent`
-                ${action}最多的${topNum > 1 ? ` ${topNum} 名群友` : ''}是：${tops
-                    .slice(0, topNum)
-                    .map(([ uid, count ]) => `[${getMemberName(memberDict, uid)} * ${count}]`)
-                    .join(', ')
-                }
-            ` + (topNum >= 3 ? '\n' : '')
-            const durationText = {
-                'all': '',
-                '~': '',
-                'hour': '最近一小时',
-                'day': '今日',
-                'week': '本周',
-                'month': '本月'
-            } [duration] ?? `在 ${duration} `
-            const { [sortMethod]: sortMethodText } = {
-                'count': '复读次数',
-                'tps': '每秒复读次数',
-                'startTime': '开始时间',
-                'length': '消息长度'
-            } satisfies Record<typeof sortMethod, string>
-            const { [sortDirection]: sortDirectionText } = {
-                'desc': '降序',
-                'asc': '升序'
-            } satisfies Record<Direction, string>
-
-            const total = recs.length
-            const groupText = options.global
-                ? '所有群'
-                : options.guild
-                    ? (await session.bot.getGuild(gid.split(':')[1])).name
-                    : '本群'
-            const filterText = [
-                options.starter && `由 ${ getMemberName(memberDict, options.starter) } 发起的`,
-                options.repeater && `有 ${ getMemberName(memberDict, options.repeater) } 参与的`,
-                options.interrupter && `被 ${ getMemberName(memberDict, options.interrupter) } 打断的`,
-                options.image && '包含图片的',
-                options.filter && `符合 /${options.filter}/ 的`,
-                jsfilter && `符合 \`${jsfilter}\``
-            ].filter(s => s).join('、')
-            if (! total) return `${groupText}${durationText}还没有复读。在？为什么不复读？`
-
-            const { displayPageSize: pageSize, displayLength } = config
-            const pageNum = Math.ceil(total / pageSize)
-            const pageId = options.page
-            if (pageId < 1 || pageId > pageNum) return `页数必须为 1 到 ${pageNum} 间的整数。`
-
-            const getListText = () => recs
-                .slice((pageId - 1) * pageSize, pageId * pageSize)
-                .map((rec, i) => {
-                    const content = ellipsis(unescapeMessage(rec, { allowImage: false }), displayLength)
-                    const times = ` * ${rec.senders.length}`
-                    const extra =
-                        sortMethod === 'tps' ? `, ${rec.tps.toFixed(2)}/s` :
-                        ''
-                    return `${i + 1}. [${content}${times}${extra}] # ${rec.id}`
-                })
-                .join('\n')
-
-            const text = (options.list
-                ? dedent`
-                    ${groupText}${durationText}共有 ${recs.length} 次${filterText}复读
-                    按${sortMethodText}${sortDirectionText}排序依次为：（第 ${pageId} / ${pageNum} 页）
-                    ${getListText()}
-                ` + '\n\n'
-                : ''
-            ) + (! isFiltered && topNum > 0
-                ? dedent`   
-                    ${topText('参与复读', topRepeaters)}
-                    ${topText('发起复读', topStarters)}
-                    ${topText('打断复读', topInterrupters)}
-                `
-                : ''
-            )
-
-            return text
-        })
-    
-    ctx.command('repeat.word', '查看群复读词频统计')
-        .alias('repeat.w')
-
-    ctx.command('repeat.word.word', '查看群内最常被复读的词')
-        .option('guild', '-g <guild:channel> 指定群（默认为本群）', {
-            conflictsWith: { option: 'global', value: true }
-        })
-        .option('global', '-G 指定群（默认为本群）')
-        .option('top', '-t <top:natural>', { fallback: 20 })
-        .option('tag', '-T <tag:string>')
-        .option('all', '-a 显示所有词（包括黑名单中的）')
-        .action(async ({
-            session: { guildId, gid },
-            options: { guild: assignedGid, global: isGlobal, top: topCount, all, tag: tagStr }
-        }) => {
-            if (! guildId && ! assignedGid && ! isGlobal) return '请在群内调用'
-            if (assignedGid) gid = assignedGid
-            const settings = getGuildSettings(gid)
-
-            const tags = tagStr ? tagStr.split(',') : null
-
-            const words = await ctx.database
-                .select('w-repeat-word')
-                .where({
-                    gid: isGlobal ? {} : gid,
-                    word: all ? {} : { $not: { $in: settings.segmentationWordBlacklist } },
-                    tag: {
-                        $and: [
-                            all ? {} : { $not: { $in: settings.segmentationWordBlacklist } },
-                            tags ? { $in: tags } : {}
-                        ]
-                    }
-                })
-                .orderBy('count', 'desc')
-                .limit(topCount)
-                .execute()
-            
-            const filterText = tags
-                ? `词性为 ${tags.join(' | ')} 的`
-                : ''
-
-            const wordsText = words
-                .map(({ word, tag, count }, index) => `${index + 1}. ${word} [${tag}]: ${count}`)
-                .join('\n')
-
-            return `群内最经常被复读的${filterText} ${topCount} 个词是：\n\n${wordsText}`
-        })
-
-    ctx.command('repeat.word.tag', '查看群内最常被复读的词性')
-        .option('guild', '-g <guild:channel> 指定群（默认为本群）', {
-            conflictsWith: { option: 'global', value: true }
-        })
-        .option('global', '-G 指定群（默认为本群）')
-        .option('top', '-t <top:natural>', { fallback: 20 })
-        .option('all', '-a 显示所有词（包括黑名单中的）')
-        .action(async ({
-            session: { guildId, gid },
-            options: { guild: assignedGid, global: isGlobal, top: topCount }
-        }) => {
-            if (! guildId && ! assignedGid && ! isGlobal) return '请在群内调用'
-            if (assignedGid) gid = assignedGid
-
-            const tags = await ctx.database
-                .select('w-repeat-word')
-                .groupBy('tag', {
-                    count: row => $.sum(row.count)
-                })
-                .orderBy('count', 'desc')
-                .limit(topCount)
-                .execute()
-
-            const tagsText = tags
-                .map(({ tag, count }, index) => `${index + 1}. ${tag}: ${count}`)
-                .join('\n')
-
-            return `群内最经常被复读的 ${topCount} 个词性是：\n\n${tagsText}`
-        })
-
-    ctx.command('repeat.graph', '查看复读相关图表')
-        .alias('repeat.g')
-
-    ctx.command('repeat.graph.flow', '查看群复读流向图')
-        .option('guild', '-g <guild:channel> 指定群（默认为本群）')
-        .option('minflow', '-m <minflow:string> 流量最小大小，低于该指的流向线条不显示，可用百分数表示最大流量的百分比', { fallback: '0' })
-        .option('duration',
-            '-d <duration:string> 指定时间范围。可以为 hour/day/week/month/all，或者用波浪号（~）分割的开始、结束时间',
-            { fallback: 'day' }
-        )
-        .action(async ({ session, options }) => {
-            if (! ctx.echarts) return '此指令需要 echarts 服务'
-
-            if (! session.guildId && ! options.guild) return '请在群内调用'
-            const gid = options.guild ?? session.gid
-            const [, guildId ] = gid.split(':')
-
-            const memberDict = await getMemberDict(session, guildId)
-
-            const starterDict: Record<string, { name: string, count: number }> = {}
-            const sendMat: Record<string, Record<string, { count: number }>> = {}
-            const recs = await ctx.database
-                .select('w-repeat-record')
-                .where({
-                    gid,
-                    ...parseDuration(options.duration)
-                })
-                .execute()
-
-            recs.forEach(rec => {
-                const starter = rec.senders[0]
-                void (starterDict[starter] ??= {
-                    name: getMemberName(memberDict, starter),
-                    count: 0
-                }).count ++
-                rec.senders.slice(1).forEach(sender => {
-                    ((sendMat[sender] ??= {})[starter] ??= { count: 0 }).count ++
-                })
-            })
-
-            type GraphSeriesOption = echarts.RegisteredSeriesOption['graph']
-
-            const starters = Object.entries(starterDict)
-                .map(([ uid, { name, count } ]) => ({ uid, name, count }))
-            const starterNum = starters.length
-            const maxRepeatedCount = Math.max(...starters.map(({ count }) => count))
-            const nodes = starters
-                .map<GraphSeriesOption['data'][number]>(({ uid, name, count }, i) => ({
-                    name: uid,
-                    label: {
-                        show: true,
-                        formatter: name,
-                        color: '#000',
-                        borderColor: 'transparent',
-                        shadowColor: 'transparent',
-                        fontSize: 22
-                    },
-                    symbolSize: count / maxRepeatedCount * 150,
-                    category: String(i)
-                }))
-
-            const flows = Object
-                .entries(sendMat)
-                .flatMap(([ source, targetRow ]) => Object
-                    .entries(targetRow)
-                    .map(([ target, { count } ]) => ({
-                        source,
-                        target,
-                        count
-                    }))
-                )
-            const maxRepeatFlowSize = Math.max(...flows.map(({ count }) => count))
-
-            const tryParseNumber = (s: string): number => {
-                const n = Number(s)
-                if (Number.isNaN(n)) throw new SessionError(`${s} 不是合法的数字`)
-                return n
-            }
-            const minFlowSize = options.minflow.endsWith('%')
-                ? maxRepeatFlowSize * .01 * tryParseNumber(options.minflow.slice(0, - 1))
-                : tryParseNumber(options.minflow)
-            const links = flows
-                .filter(flow => flow.count >= minFlowSize)
-                .map<GraphSeriesOption['links'][number]>(({ source, target, count }) => ({
-                    source,
-                    target,
-                    lineStyle: {
-                        width: count / maxRepeatFlowSize * 50,
-                        curveness: 0.2,
-                        type: 'solid',
-                        color: 'source'
-                    }
-                }))
-
-            const eh = ctx.echarts.createChart(800, 800, {
-                series: {
-                    type: 'graph',
-                    width: 560,
-                    height: 560,
-                    layout: 'circular',
-                    label: {
-                        overflow: 'break',
-                        width: 100
-                    },
-                    circular: {
-                        rotateLabel: true
-                    },
-                    categories: Array
-                        .from({ length: starterNum })
-                        .map((_, i) => ({ name: String(i) })),
-                    data: nodes,
-                    links
-                },
-                backgroundColor: '#fff'
-            })
-
-            return eh.export(3000)
-        })
-
-    ctx.command('repeat.graph.time', '查看群复读时段图')
-        .option('guild', '-g <guild:channel> 指定群（默认为本群）')
-        .action(async ({ session, options }) => {
-            if (! ctx.echarts) return '此指令需要 echarts 服务'
-
-            if (! session.guildId && ! options.guild) return '请在群内调用'
-            const gid = options.guild ?? session.gid
-
-            // TODO: optimize
-            const recs = await ctx.database
-                .select('w-repeat-record')
-                .where({ gid })
-                .project([ 'startTime' ])
-                .execute()
-
-            const timeMat: Record<string, Record<string, number>> = Object.fromEntries(
-                Array.from({ length: 24 }).map((_, i) => [
-                    i,
-                    Object.fromEntries(Array.from({ length: 7 }).map((_, j) => [j, 0]))
-                ])
-            )
-
-            recs.forEach(({ startTime }) => {
-                const time = dayjs(startTime)
-                const day = time.day()
-                const hour = time.hour()
-                timeMat[hour][day] ++
-            })
-
-            const data = Object
-                .entries(timeMat)
-                .flatMap(([ hour, dayRow ]) => Object
-                    .entries(dayRow)
-                    .map(([ day, count ]) => [ + hour, + day, count ])
-                )
-
-            const eh = ctx.echarts.createChart(24 * 30 + 100, 7 * 30 + 120, {
-                xAxis: {
-                    type: 'category',
-                    data: Array.from({ length: 24 }).map((_, i) => `0${i}`.slice(-2)),
-                    splitArea: { show: true }
-                },
-                yAxis: {
-                    type: 'category',
-                    data: [ 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat' ],
-                    splitArea: { show: true }
-                },
-                visualMap: {
-                    min: 0,
-                    max: Math.max(...data.map(it => it[2])),
-                    calculable: true,
-                    show: false
-                },
-                series: {
-                    type: 'heatmap',
-                    silent: true,
-                    label: { show: true },
-                    data
-                },
-                backgroundColor: '#fff'
-            })
-
-            return eh.export()
-        })
-
-    ctx.command('repeat.graph.top-calendar [month:string]', '查看群复读排行日历')
-        .alias('repeat.graph.topc')
-        .option('guild', '-g <guild:channel> 指定群（默认为本群）')
-        .option('type', '-t <type> 排行榜类型，可以为 r(epeater) / (s)tarter / i(nterrupter) / a(ll)，默认为 all', {
-            type: /^(r|repeater|s|starter|i|interrupter|a|all)$/,
-            fallback: 'all'
-        })
-        .option('avatar', '-a 使用头像', { fallback: true })
-        .option('avatar', '-A 不使用头像', { value: false })
-        .action(async ({ session, options }, month) => {
-            if (! ctx.echarts) return '此指令需要 echarts 服务'
-
-            if (! session.guildId && ! options.guild) return '请在群内调用'
-            const gid = options.guild ?? session.gid
-
-            const date = month ? dayjs(month, 'YYYY-MM', true) : dayjs()
-            if (! date.isValid()) return `${month} 不是合法的月份，月份格式应为 YYYY-MM`
-            month = date.format('YYYY-MM')
-
-            const days = getDaysOfMonth(date)
-            const today = date.format('DD')
-
-            type TopType = 'repeater' | 'starter' | 'interrupter'
-            const topTypeText = {
-                starter: '发起者',
-                repeater: '参与者',
-                interrupter: '打断者'
-            } satisfies Record<TopType, string>
-
-            const getCalendar = async (topType: TopType): Promise<{
-                output: string,
-                dataToUpsert: Update<RepeatDay>[]
-            }> => {
-                const idKey = `top${capitalize(topType)}Id` as const
-                const countKey = `top${capitalize(topType)}Count` as const
-
-                const dataExists = await ctx.database
-                    .select('w-repeat-calendar')
-                    .where({
-                        gid,
-                        month: 'YYYY-MM',
-                        day: { $ne: today },
-                        [idKey]: { $ne: null }
-                    })
-                    .project({
-                        month: row => row.month,
-                        day: row => row.day,
-                        id: row => row[idKey],
-                        count: row => row[countKey]
-                    })
-                    .execute()
-                const missingDays = exclude(days, dataExists.map(rec => rec.month))
-
-                let maxCount = 0
-                const [ memberDict, [ dataCreated, dataToUpsert ] ] = await Promise.all([
-                    getMemberDict(session, gid.split(':')[1]),
-                    unzipPromise(Promise.all(missingDays.map(async day => {
-                        const date = dayjs(`${month}-${day}`)
-                        const start = + date.startOf('day')
-                        const end = + date.endOf('day')
-                        const recs = await ctx.database.get('w-repeat-record', {
-                            gid,
-                            startTime: { $gte: start, $lte: end }
-                        })
-                        if (! recs.length) return [
-                            { month, day, id: null, count: null },
-                            { month, day }
-                        ]
-                        const candidatorDict: Record<string, number> = {}
-                        const inc = safeInc(candidatorDict)
-                        recs.forEach(rec => {
-                            if (topType === 'repeater') rec.senders.forEach(inc)
-                            else if (topType === 'starter') inc(rec.senders[0])
-                            else inc(rec.interrupter)
-                        })
-                        const [ [ id, count ] ] = Object
-                            .entries(candidatorDict)
-                            .sort(([, count1 ], [, count2 ]) => count2 - count1)
-                        if (count > maxCount) maxCount = count
-                        return [
-                            { month, day, id, count },
-                            { month, day, [idKey]: id, [countKey]: count }
-                        ] as const
-                    })))
-                ])
-
-                const data = [ ...dataExists, ...dataCreated ]
-
-                const CELL_SIZE = 80
-
-                const eh = ctx.echarts.createChart(700, 500, {
-                    backgroundColor: '#fff',
-                    calendar: {
-                        orient: 'vertical',
-                        yearLabel: {
-                            show: false
-                        },
-                        monthLabel: {
-                            nameMap: 'cn',
-                            margin: 20,
-                            fontSize: 20,
-                            fontWeight: 600
-                        },
-                        dayLabel: {
-                            nameMap: [ 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat' ],
-                            firstDay: 1,
-                            margin: 20,
-                            fontSize: 17
-                        },
-                        cellSize: CELL_SIZE,
-                        range: month
-                    },
-                    visualMap: {
-                        min: 0,
-                        max: maxCount,
-                        calculable: true,
-                        show: false
-                    },
-                    series: {
-                        type: 'custom',
-                        coordinateSystem: 'calendar',
-                        renderItem: (_, api) => {
-                            const day = api.value('day') as string
-                            const id = api.value('id') as string
-                            const count = api.value('count') as number
-                            const [ x, y ] = api.coord(`${month}-${day}`)
-                            
-                            type CustomSeriesOption = echarts.RegisteredSeriesOption['custom']
-                            type CustomGroupOption = ReturnType<CustomSeriesOption['renderItem']> & { type: 'group' }
-
-                            const children: CustomGroupOption['children'] = [
-                                id ? {
-                                    type: 'image',
-                                    style: {
-                                        x: x - CELL_SIZE / 2 + 4,
-                                        y: y - CELL_SIZE / 2 + 4,
-                                        width: CELL_SIZE - 8,
-                                        height: CELL_SIZE - 8,
-                                        image: memberDict[id]?.user?.avatar,
-                                        shadowColor: '#73b9bc',
-                                        shadowBlur: day === today ? 4 : 0,
-                                    }
-                                } : null,
-                                id ? {
-                                    type: 'text',
-                                    style: {
-                                        text: String(count),
-                                        x,
-                                        y: y + CELL_SIZE / 2 - 20 - 2,
-                                        align: 'center',
-                                        fill: '#000',
-                                        stroke: '#fff',
-                                        lineWidth: 2,
-                                        textFont: api.font({ fontSize: 16, fontWeight: 'bold' })
-                                    }
-                                } : null,
-                                {
-                                    type: 'text',
-                                    style: {
-                                        x: x - CELL_SIZE / 2 + 2,
-                                        y: y - CELL_SIZE / 2 + 2,
-                                        text: day,
-                                        fill: '#000',
-                                        textFont: api.font({ fontSize: 16 })
-                                    }
-                                }
-                            ]
-
-                            return {
-                                type: 'group',
-                                children: children.filter(child => child !== null)
-                            }
-                        },
-                        dimensions: [
-                            undefined,
-                            { name: 'day', type: 'ordinal' },
-                            { name: 'id', type: 'ordinal' },
-                            { name: 'count', type: 'int' }
-                        ],
-                        data: data.map(({ day, id, count }) =>
-                            [ undefined, day, id, count ]
-                        )
-                    }
-                })
-
-                const topText = topTypeText[topType]
-
-                return {
-                    output: `本月群${topText}排行榜：\n` + await eh.export(),
-                    dataToUpsert
-                }
-            }
-
-            // TODO: Optimize
-            if (options.type === 'a' || options.type === 'all') {
-                const outputs = await Promise.all(([ 'repeater', 'starter', 'interrupter' ] satisfies TopType[])
-                    .map(async (topType) => {
-                        const { output, dataToUpsert } = await getCalendar(topType)
-                        await ctx.database.upsert('w-repeat-calendar', dataToUpsert)
-                        return output
-                    })
-                )
-                const output = h('message', { forward: true }, outputs.map(output => h('message', h.parse(output))))
-                return output
-            }
-
-            const topType = ({
-                repeater: 'repeater',
-                r: 'repeater',
-                starter: 'starter',
-                s: 'starter',
-                interrupter: 'interrupter',
-                i: 'interrupter'
-            } as const)[options.type]
-
-            const { output, dataToUpsert } = await getCalendar(topType)
-            await ctx.database.upsert('w-repeat-calendar', dataToUpsert.map(day => ({
-                ...day,
-                gid
-            })))
-            return output
-        })
-
-    ctx.command('repeat.record <id:posint>', '查看某次复读详情')
-        .alias('repeat.r')
-        .option('all-senders', '-a 显示所有参与者')
-        .option('suspension', '-s 显示挂起详情')
-        .option('delete', '-d 删除此复读详情', { authority: 4 })
-        .option('ocr', '-o 识别图片中文字')
-        .option('segmentation', '--seg 对复读消息分词')
-        .action(async ({ session, options }, id) => {
-            const [ rec ] = await ctx.database.get('w-repeat-record', { id })
-            if (! rec) return `未找到复读 #${id}。`
-
-            const guildId = rec.gid.split(':')[1]
-            const memberDict = await getMemberDict(session, guildId)
-            const guild = await session.bot.getGuild(guildId)
-
-            let content: string
-
-            if (options.delete) {
-                await ctx.database.remove('w-repeat-record', { id })
-                content = '[已删除]'
-            }
-            else {
-                content = unescapeMessage(rec)
-                if (options.ocr) {
-                    if (tesseractWorker) await updateImageText(rec)
-                    else return 'Tesseract 未加载，无法识别图片中文字'
-                }
-                if (options.segmentation) {
-                    if (jieba) await updateWords(rec)
-                    else return 'Jieba 未加载，无法分词'
-                }
-            }
-
-            const sendersText = options['all-senders']
-                ? rec.senders.map(uid => getMemberName(memberDict, uid)).join('，')
-                : `${rec.senders.length} 个`
-
-            const suspensionText = rec.suspensions?.length
-                ? options.suspension
-                    ? '\n' + rec.suspensions
-                        .map(({ suspendTime, resumeTime }, i) =>
-                            `${i + 1}. 挂起时间：${timeText(suspendTime)}，恢复时间：${timeText(resumeTime)}`
-                        )
-                        .join('\n')
-                    : `挂起并恢复了 ${rec.suspensions.length} 次`
-                : '无'
-
-            return dedent`
-                复读 #${id} 详情
-                群：${guild.name}${guildId === session.guildId ? '（本群）' : ''}
-                发起者：${getMemberName(memberDict, rec.senders[0])}
-                发起时间：${timeText(rec.startTime)}
-                打断者：${getMemberName(memberDict, rec.interrupter)}
-                参与者：${sendersText}
-                打断时间：${timeText(rec.endTime)}
-                挂起情况：${suspensionText}
-                内容：${options.delete ? '[已删除]' : content}`
-                + (rec.images.length || options.ocr
-                    ? `\n图片识别结果：${options.ocr ? '[新识别]' : ''}\n${rec.images
-                        .map(({ text }, i) => `${i + 1}. ${text.trim() || '[未识别到文字]'}`)
-                        .join('\n')
-                    }`
-                    : ''
-                )
-                + (rec.words
-                    ? `\n分词结果：${rec.words.map(({ word, tag }) => `${word} [${tag}]`).join(', ')}`
-                    : ''
-                )
-        })
-
-    ctx.command('repeat.debug', '复读调试', { hidden: true })
-
-    ctx.command('repeat.debug.eval <code:text>', '在本插件作用域中运行 JavaScript', { authority: 4 })
-        .action(async (_, code) => {
-            try {
-                return JSON.stringify(await eval(code), null, 2)
-            }
-            catch (error) {
-                return String(error)
-            }
-        })
-
-    ctx.command('repeat.debug.runtime', '获取当前复读运行时', { authority: 2 })
-        .action(({ session }) => '当前运行时：\n'
-            + h.escape(JSON.stringify(runtimes[session.gid], null, 2))
-        )
-
-    ctx.command('repeat.debug.runtime.clear', '清除复读运行时', { authority: 2 })
-        .option('all', '-a 清除所有')
-        .action(async ({ session: { gid }, options: { all } }) => {
-            const gids = all ? Object.keys(runtimes) : [gid]
-            gids.forEach(gid => delete runtimes[gid])
-
-            return `清除了 ${gids.length} 个运行时`
-        })
-
-    ctx.command('repeat.debug.runtime.list', '获取复读运行时列表', { authority: 2 })
-        .action(() => '运行时列表：' + Object.keys(runtimes).join(', '))
-
-    ctx.command('repeat.admin', '复读管理')
-        .alias('repeat.a')
-
-    ctx.command('repeat.admin.settings [key:string] [value:string]', '管理群复读设置')
-        .action(async ({ session, options }, key, value) => {
-            const [ member, user ] = await Promise.all([
-                session.bot.getGuildMember(session.guildId, session.userId),
-                session.observeUser([ 'authority' ]),
-            ])
-            if (user.authority < 3 && ! member.roles.some(role => [ 'admin', 'owner' ].includes(role))) {
-                return '只有群主、管理员或 Koishi 管理员（权限等级 ≥ 3）可以管理群复读设置。'
-            }
-
-            const settings = config.guildSettings[session.gid] ??= config.globalSettings
-
-            const displaySettingItem = (symbol: string, desc) => (key: string) => (
-                `${key}${desc ? ` /* ${RepeatSettings.dict[key].meta.description} */` : ''}${symbol}${JSON.stringify(settings[key])}`
-            )
-
-            if (! key && ! value) {
-                return (
-                    '群复读设置：{\n' +
-                    Object
-                        .keys(RepeatSettings.dict)
-                        .map(key => '  ' + displaySettingItem(': ', true)(key))
-                        .join('\n') +
-                    '\n}'
-                )
-            }
-
-            if (! (key in RepeatSettings.dict)) {
-                return `未知设置项 '${key}'`
-            }
-
-            if (! value) {
-                return `群复读设置：${displaySettingItem(' == ', false)(key)}`
-            }
-           
-            try {
-                const validated = RepeatSettings.dict[key](JSON.parse(value))
-                settings[key] = validated
-                ctx.scope.update(config)
-                return `已修改群复读设置：${displaySettingItem(' = ', false)(key)}`
-            }
-            catch {
-                return `无法解析设置值 '${value}'`
-            }
-        })
-        
-    ctx.command('repeat.admin.regen-user-table', '重建复读用户表', { authority: 4 })
-        .action(async ({ session }) => {
-            await session.send('正在根据复读记录重建用户数据表……')
-            await ctx.database.remove('w-repeat-user', {})
-            const recs = await ctx.database.get('w-repeat-record', {})
-            const users: Record<string, RepeatUser> = {}
-            const getUser = (uid: string): RepeatUser => users[uid] ??= {
-                uid,
-                repeatTime: 0,
-                repeatCount: 0,
-                beRepeatedTime: 0,
-                beRepeatedCount: 0,
-                interruptTime: 0
-            }
-            recs.forEach(rec => {
-                const starter = getUser(rec.senders[0])
-                starter.beRepeatedTime ++
-                starter.beRepeatedCount += rec.senders.length - 1
-
-                const counted: Record<string, boolean> = {}
-                rec.senders.slice(1).forEach(uid => {
-                    const user = getUser(uid)
-                    user.repeatCount ++
-                    if (! counted[uid]) {
-                        counted[uid] = true
-                        user.repeatTime ++
-                    }
-                })
-
-                getUser(rec.interrupter).interruptTime ++
-            })
-            const writeResult = await ctx.database.upsert('w-repeat-user', () => Object.values(users))
-            return `已重建 ${writeResult.inserted} 条用户数据`
-        })
-
-    ctx.command('repeat.admin.ocr-all', '识别所有消息图片', { authority: 4 })
-        .action(({ session }) => profile(async () => {
-            if (! tesseractWorker) return 'Tesseract 未加载，无法识别图片中文字'
-            await session.send('开始查询数据库……')
-            const recs = await ctx.database.get('w-repeat-record', row => $.gt($.length(row.images), 0))
-            const imageCount = recs.reduce((count, rec) => count + rec.images.filter(x => x !== null).length, 0)
-            await session.send(`正在识别 ${recs.length} 条复读记录中的 ${imageCount} 张图片……`)
-            await Promise.all(recs.map(updateImageText))
-        }))
-
-    ctx.command('repeat.admin.segmentation-all', '对所有消息分词', { authority: 4 })
-        .action(({ session }) => profile(async () => {
-            if (! jieba) return 'Jieba 未加载，无法分词'
-            await session.send('正在清空分词表……')
-            await ctx.database.remove('w-repeat-word', {})
-            await session.send('开始查询数据库…… ')
-            const recs = await ctx.database.get('w-repeat-record', {})
-            await session.send(`正在对 ${recs.length} 条复读记录分词……`)
-            const wordDict: Record<string, number> = {}
-            const incWord = safeInc(wordDict)
-            await Promise.all(recs.map(async rec => {
-                const words = await updateWords(rec)
-                words.forEach(({ tag, word }) => incWord(`${rec.gid}#${tag}#${word}`))
-            }))
-            await session.send('正在写入分词表……')
-            const words = Object.entries(wordDict).map(([ gidTagWord, count ]) => {
-                const [ gid, tag, word ] = splitWithLimit(gidTagWord, '#', 3)
-                return { gid, word, tag, count }
-            })
-            await ctx.database.upsert('w-repeat-word', words)
-        }))
-
-    ctx.command('repeat.admin.migrate-guild <from:channel> <to:channel>', '迁移群复读记录', { authority: 4 })
-        .action(async (_, from, to) => {
-            const res = await ctx.database.set('w-repeat-record', { gid: from }, { gid: to })
-            return `成功从 ${from} 迁移了 ${res.modified} 条复读记录到 ${to}。`
-        })
-
-    // 回收副作用
-    ctx.on('dispose', () => {
-        // 终止 tesseract Worker
-        tesseractWorker?.terminate()
+        // 将挂起的复读移出复读记录表，并标记从运行时中删除
+        await ctx.database.remove('w-repeat-record', resumed.id)
+        rec.deleted = true
+
+        // 用恢复的复读替换当前复读
+        isNewRec = false
+        runtime.currentRec = omit(resumed, [ 'id' ])
+      }
     })
+
+    // 如果发生复读
+    if (isRepeating) {
+      // 将当前用户加入运行时的发送者列表中
+      currentRec.senders.push(uid)
+      // 更新回复
+      updateRecQuote(session, currentRec)
+    }
+    // 当前复读的复读条数，大于 1 则为完整复读
+    const repeatCount = currentRec?.senders?.length ?? 0
+
+    // 如果发生了复读
+    if (isRepeating) {
+      // 如果是完整复读，则更新用户复读数据
+      if (repeatCount > 1) await Promise.all([
+        // 更新当前用户的复读数据
+        ctx.database.upsert('w-repeat-user', row => [{
+          uid,
+          repeatCount: $inc(row.repeatTime),
+          repeatTime: currentRec.senders.slice(0, -1).includes(uid)
+            ? undefined
+            : $inc(row.repeatTime)
+        }]),
+        // 更新复读发起者的复读数据
+        ctx.database.upsert('w-repeat-user', row => [{
+          uid: currentRec.senders[0],
+          beRepeatedCount: $inc(row.beRepeatedCount),
+          beRepeatedTime: currentRec.senders.length === 2
+            ? $inc(row.beRepeatedTime)
+            : undefined
+        }])
+      ])
+    }
+    else {
+      // 处理未激活的复读
+      await procRecs('queuedRecs', async rec => {
+        // 用新激活的复读替换当前复读
+        isNewRec = false
+        currentRec = runtime.currentRec = rec
+      })
+
+      // 如果当前复读是完整复读（即发送人数大于 1），则被打断
+      if (repeatCount > 1) {
+        // 记录打断者和复读结束时间
+        currentRec.interrupter = uid
+        currentRec.endTime = Date.now()
+
+        const [ old ] = await Promise.all([
+          // 将运行时作为新复读记录写入复读记录表
+          ctx.database.create('w-repeat-record', omit(currentRec, [ 'unrelatedCount', 'deleted' ])),
+          // 更新打断者复读用户数据
+          ctx.database.upsert('w-repeat-user', row => [{
+            uid,
+            interruptTime: $inc(row.interruptTime)
+          }]),
+          // 识别图片中文字
+          (settings.enableOcr && tesseractWorker) ? updateImageText(currentRec) : undefined,
+          // 分词
+          (settings.enableSegmentation && jieba) ? updateWords(currentRec) : undefined
+        ])
+
+        // 如果允许挂起，挂起被打断的复读
+        if (settings.maxUnrelatedCount && old.senders.length > 1) {
+          runtime.suspendedRecs.unshift({
+            ...old,
+            unrelatedCount: 1,
+            suspendTime: Date.now(),
+            resumeTime: undefined
+          })
+        }
+      }
+
+      // 如果需要新建当前复读
+      if (isNewRec) {
+        // 新建当前复读，包含内容、图片、开始时间、第一个发送者的信息
+        runtime.currentRec = currentRec = {
+          ...createCurrentRec(gid),
+          content,
+          images,
+          startTime: session.timestamp,
+          senders: [ uid ],
+        }
+        updateRecQuote(session, currentRec)
+        // 滚动复读队列
+        runtime.queuedRecs.unshift(currentRec)
+      }
+    }
+
+    // 机器人复读
+    if (currentRec.senders.length === settings.repeatCount) {
+      return h('as-forward', { level: 'never' }, [
+        currentRec.quote?.valid ? h.quote(currentRec.quote.id) : '',
+        ...h.parse(unescapeMessage(currentRec))
+      ])
+    }
+
+    // 传向下一个中间件
+    return next()
+  }, config.isPrepend)
+
+  // 复读指令
+  ctx.command('repeat', '群复读功能')
+
+  ctx.command('repeat.user [user:user]', '查看用户复读统计')
+    .action(async ({ session }, uid) => {
+      const [ user ] = await ctx.database.get('w-repeat-user', { uid: uid || session.uid })
+      if (! user) return `还没有复读统计`
+      return dedent`
+        复读条数：　　${user.repeatCount}
+        复读次数：　　${user.repeatTime}
+        被复读条数：　${user.beRepeatedCount}
+        被复读次数：　${user.beRepeatedTime}
+        打断复读次数：${user.interruptTime}
+      `
+    })
+
+  ctx.command('repeat.stat', '查看群复读统计')
+    .alias('repeat.s')
+    .alias('repeat.guild')
+    .option('guild', '-g <guild:channel> 指定群（默认为本群）', {
+      conflictsWith: { option: 'global', value: true }
+    })
+    .option('global', '-G 指定群（默认为本群）')
+    .option('duration',
+      '-d <duration:string> 指定时间范围。可以为 hour/day/week/month/all，或者用波浪号（~）分割的开始、结束时间',
+      { fallback: 'day' }
+    )
+    .option('page', '-p <page:posint> 查看分页', { fallback: 1 })
+    .option('list', '-l 显示复读记录列表', { fallback: true })
+    .option('list', '-L 不显示复读记录列表', { value: false })
+    .option('top', '-t <top:natural> 排行榜人数', { fallback: 1 })
+    .option('filter', '-f <content:string> 根据查找复读记录', requireList())
+    .option('image', '-i 查找包含图片的复读记录', requireList())
+    .option('starter', '--us <user:user> 根据发起者查找（默认为自己）', requireList())
+    .option('repeater', '--ur <user:user> 根据参与者查找（默认为自己）', requireList())
+    .option('interrupter', '--ui <user:user> 根据打断者查找（默认为自己）', requireList())
+    .option('jsfilter', '-j <code:string>', {
+      authority: 4,
+      conflictsWith: [ 'filter', { option: 'list', value: false } ]
+    })
+    .option('sort', '-s <sortby> 指定排序方式', { type: /^(count|tps|startTime)?(:(desc|asc))?$/, fallback: 'count' })
+    .action(async ({ session, options }) => {
+      const { global: isGlobal, jsfilter, top: topNum, duration } = options
+      let { guild: gid } = options
+      if (! session.guildId && ! options.guild && ! isGlobal) return '请在群内调用'
+      if (! isGlobal) gid ||= session.gid
+
+      const [ sortMethod = 'count', sortDirection = 'desc' ] = options.sort.split(':') as [
+        'count' | 'tps' | 'length' | 'startTime', Direction
+      ]
+      const isFiltered = ([ 'filter', 'starter', 'repeater', 'interrupter' ] satisfies (keyof typeof options)[])
+        .some(name => name in options)
+
+      // TODO: wait for row destruction
+      const reserveProjection = getReserveProjection<RepeatRecord>([
+        'id', 'gid', 'content', 'senders', 'startTime', 'endTime', 'interrupter', 'images'
+      ])
+
+      let recs = await ctx.database
+        .select('w-repeat-record')
+        .where(row => $.query(row, {
+          gid: isGlobal ? {} : gid,
+          ...parseDuration(duration)
+        }, $.and(
+          options.filter
+            ? $.regex(row.content, options.filter)
+            : true,
+          options.starter
+            ? $.eq($.get(row.senders, 0), options.starter)
+            : true,
+          options.repeater
+            ? $.in(options.repeater, row.senders)
+            : true,
+          options.interrupter
+            ? $.eq(row.interrupter, options.interrupter)
+            : true,
+          options.image
+            ? $.gt($.length(row.images), 0)
+            : true
+        )))
+        .project({
+          ...reserveProjection,
+          count: row => $.length(row.senders)
+        })
+        .project(removeUndefined({
+          ...reserveProjection,
+          count: row => row.count,
+          tps: sortMethod === 'tps'
+            ? row => $.mul($.div(row.count, $.sub(row.endTime, row.startTime)), 1000)
+            : undefined
+        } satisfies Dict<Selection.Callback<RepeatRecord & { count: number }>>))
+        .orderBy(sortMethod as any, sortDirection)
+        .execute()
+
+      if (jsfilter) recs = recs.filter(eval(jsfilter))
+
+      const topInterrupters = countAndSortBy(recs, rec => rec.interrupter)
+      const topStarters = countAndSortBy(recs, rec => rec.senders[0])
+      const topRepeaters = countAndSortBy(recs, rec => rec.senders)
+
+      const memberDict = isGlobal ? null : await getMemberDict(session, gid.split(':')[1])
+
+      const topText = (action: string, tops: [string, number][]) => dedent`
+        ${action}最多的${topNum > 1 ? ` ${topNum} 名群友` : ''}是：${tops
+          .slice(0, topNum)
+          .map(([ uid, count ]) => `[${getMemberName(memberDict, uid)} * ${count}]`)
+          .join(', ')
+        }
+      ` + (topNum >= 3 ? '\n' : '')
+      const durationText = {
+        'all': '',
+        '~': '',
+        'hour': '最近一小时',
+        'day': '今日',
+        'week': '本周',
+        'month': '本月'
+      } [duration] ?? `在 ${duration} `
+      const { [sortMethod]: sortMethodText } = {
+        'count': '复读次数',
+        'tps': '每秒复读次数',
+        'startTime': '开始时间',
+        'length': '消息长度'
+      } satisfies Record<typeof sortMethod, string>
+      const { [sortDirection]: sortDirectionText } = {
+        'desc': '降序',
+        'asc': '升序'
+      } satisfies Record<Direction, string>
+
+      const total = recs.length
+      const groupText = options.global
+        ? '所有群'
+        : options.guild
+          ? (await session.bot.getGuild(gid.split(':')[1])).name
+          : '本群'
+      const filterText = [
+        options.starter && `由 ${ getMemberName(memberDict, options.starter) } 发起的`,
+        options.repeater && `有 ${ getMemberName(memberDict, options.repeater) } 参与的`,
+        options.interrupter && `被 ${ getMemberName(memberDict, options.interrupter) } 打断的`,
+        options.image && '包含图片的',
+        options.filter && `符合 /${options.filter}/ 的`,
+        jsfilter && `符合 \`${jsfilter}\``
+      ].filter(s => s).join('、')
+      if (! total) return `${groupText}${durationText}还没有复读。在？为什么不复读？`
+
+      const { displayPageSize: pageSize, displayLength } = config
+      const pageNum = Math.ceil(total / pageSize)
+      const pageId = options.page
+      if (pageId < 1 || pageId > pageNum) return `页数必须为 1 到 ${pageNum} 间的整数。`
+
+      const getListText = () => recs
+        .slice((pageId - 1) * pageSize, pageId * pageSize)
+        .map((rec, i) => {
+          const content = ellipsis(unescapeMessage(rec, { allowImage: false }), displayLength)
+          const times = ` * ${rec.senders.length}`
+          const extra =
+            sortMethod === 'tps' ? `, ${rec.tps.toFixed(2)}/s` :
+            ''
+          return `${i + 1}. [${content}${times}${extra}] # ${rec.id}`
+        })
+        .join('\n')
+
+      const text = (options.list
+        ? dedent`
+          ${groupText}${durationText}共有 ${recs.length} 次${filterText}复读
+          按${sortMethodText}${sortDirectionText}排序依次为：（第 ${pageId} / ${pageNum} 页）
+          ${getListText()}
+        ` + '\n\n'
+        : ''
+      ) + (! isFiltered && topNum > 0
+        ? dedent`   
+          ${topText('参与复读', topRepeaters)}
+          ${topText('发起复读', topStarters)}
+          ${topText('打断复读', topInterrupters)}
+        `
+        : ''
+      )
+
+      return text
+    })
+  
+  ctx.command('repeat.word', '查看群复读词频统计')
+    .alias('repeat.w')
+
+  ctx.command('repeat.word.word', '查看群内最常被复读的词')
+    .option('guild', '-g <guild:channel> 指定群（默认为本群）', {
+      conflictsWith: { option: 'global', value: true }
+    })
+    .option('global', '-G 指定群（默认为本群）')
+    .option('top', '-t <top:natural>', { fallback: 20 })
+    .option('tag', '-T <tag:string>')
+    .option('all', '-a 显示所有词（包括黑名单中的）')
+    .action(async ({
+      session: { guildId, gid },
+      options: { guild: assignedGid, global: isGlobal, top: topCount, all, tag: tagStr }
+    }) => {
+      if (! guildId && ! assignedGid && ! isGlobal) return '请在群内调用'
+      if (assignedGid) gid = assignedGid
+      const settings = getGuildSettings(gid)
+
+      const tags = tagStr ? tagStr.split(',') : null
+
+      const words = await ctx.database
+        .select('w-repeat-word')
+        .where({
+          gid: isGlobal ? {} : gid,
+          word: all ? {} : { $not: { $in: settings.segmentationWordBlacklist } },
+          tag: {
+            $and: [
+              all ? {} : { $not: { $in: settings.segmentationWordBlacklist } },
+              tags ? { $in: tags } : {}
+            ]
+          }
+        })
+        .orderBy('count', 'desc')
+        .limit(topCount)
+        .execute()
+      
+      const filterText = tags
+        ? `词性为 ${tags.join(' | ')} 的`
+        : ''
+
+      const wordsText = words
+        .map(({ word, tag, count }, index) => `${index + 1}. ${word} [${tag}]: ${count}`)
+        .join('\n')
+
+      return `群内最经常被复读的${filterText} ${topCount} 个词是：\n\n${wordsText}`
+    })
+
+  ctx.command('repeat.word.tag', '查看群内最常被复读的词性')
+    .option('guild', '-g <guild:channel> 指定群（默认为本群）', {
+      conflictsWith: { option: 'global', value: true }
+    })
+    .option('global', '-G 指定群（默认为本群）')
+    .option('top', '-t <top:natural>', { fallback: 20 })
+    .option('all', '-a 显示所有词（包括黑名单中的）')
+    .action(async ({
+      session: { guildId, gid },
+      options: { guild: assignedGid, global: isGlobal, top: topCount }
+    }) => {
+      if (! guildId && ! assignedGid && ! isGlobal) return '请在群内调用'
+      if (assignedGid) gid = assignedGid
+
+      const tags = await ctx.database
+        .select('w-repeat-word')
+        .groupBy('tag', {
+          count: row => $.sum(row.count)
+        })
+        .orderBy('count', 'desc')
+        .limit(topCount)
+        .execute()
+
+      const tagsText = tags
+        .map(({ tag, count }, index) => `${index + 1}. ${tag}: ${count}`)
+        .join('\n')
+
+      return `群内最经常被复读的 ${topCount} 个词性是：\n\n${tagsText}`
+    })
+
+  ctx.command('repeat.graph', '查看复读相关图表')
+    .alias('repeat.g')
+
+  ctx.command('repeat.graph.flow', '查看群复读流向图')
+    .option('guild', '-g <guild:channel> 指定群（默认为本群）')
+    .option('minflow', '-m <minflow:string> 流量最小大小，低于该指的流向线条不显示，可用百分数表示最大流量的百分比', { fallback: '0' })
+    .option('duration',
+      '-d <duration:string> 指定时间范围。可以为 hour/day/week/month/all，或者用波浪号（~）分割的开始、结束时间',
+      { fallback: 'day' }
+    )
+    .action(async ({ session, options }) => {
+      if (! ctx.echarts) return '此指令需要 echarts 服务'
+
+      if (! session.guildId && ! options.guild) return '请在群内调用'
+      const gid = options.guild ?? session.gid
+      const [, guildId ] = gid.split(':')
+
+      const memberDict = await getMemberDict(session, guildId)
+
+      const starterDict: Record<string, { name: string, count: number }> = {}
+      const sendMat: Record<string, Record<string, { count: number }>> = {}
+      const recs = await ctx.database
+        .select('w-repeat-record')
+        .where({
+          gid,
+          ...parseDuration(options.duration)
+        })
+        .execute()
+
+      recs.forEach(rec => {
+        const starter = rec.senders[0]
+        void (starterDict[starter] ??= {
+          name: getMemberName(memberDict, starter),
+          count: 0
+        }).count ++
+        rec.senders.slice(1).forEach(sender => {
+          ((sendMat[sender] ??= {})[starter] ??= { count: 0 }).count ++
+        })
+      })
+
+      type GraphSeriesOption = echarts.RegisteredSeriesOption['graph']
+
+      const starters = Object.entries(starterDict)
+        .map(([ uid, { name, count } ]) => ({ uid, name, count }))
+      const starterNum = starters.length
+      const maxRepeatedCount = Math.max(...starters.map(({ count }) => count))
+      const nodes = starters
+        .map<GraphSeriesOption['data'][number]>(({ uid, name, count }, i) => ({
+          name: uid,
+          label: {
+            show: true,
+            formatter: name,
+            color: '#000',
+            borderColor: 'transparent',
+            shadowColor: 'transparent',
+            fontSize: 22
+          },
+          symbolSize: count / maxRepeatedCount * 150,
+          category: String(i),
+        }))
+
+      const flows = Object
+        .entries(sendMat)
+        .flatMap(([ source, targetRow ]) => Object
+          .entries(targetRow)
+          .map(([ target, { count } ]) => ({
+            source,
+            target,
+            count
+          }))
+        )
+      const maxRepeatFlowSize = Math.max(...flows.map(({ count }) => count))
+
+      const tryParseNumber = (s: string): number => {
+        const n = Number(s)
+        if (Number.isNaN(n)) throw new SessionError(`${s} 不是合法的数字`)
+        return n
+      }
+      const minFlowSize = options.minflow.endsWith('%')
+        ? maxRepeatFlowSize * .01 * tryParseNumber(options.minflow.slice(0, - 1))
+        : tryParseNumber(options.minflow)
+      const links = flows
+        .filter(flow => flow.count >= minFlowSize)
+        .map<GraphSeriesOption['links'][number]>(({ source, target, count }) => ({
+          source,
+          target,
+          lineStyle: {
+            width: count / maxRepeatFlowSize * 50,
+            curveness: 0.2,
+            type: 'solid',
+            color: 'source'
+          }
+        }))
+
+      const eh = ctx.echarts.createChart(800, 800, {
+        series: {
+          type: 'graph',
+          width: 560,
+          height: 560,
+          layout: 'circular',
+          label: {
+            overflow: 'break',
+            width: 100
+          },
+          circular: {
+            rotateLabel: true
+          },
+          categories: Array
+            .from({ length: starterNum })
+            .map((_, i) => ({ name: String(i) })),
+          data: nodes,
+          links
+        },
+        backgroundColor: '#fff'
+      })
+
+      return eh.export(3000)
+    })
+
+  ctx.command('repeat.graph.time', '查看群复读时段图')
+    .option('guild', '-g <guild:channel> 指定群（默认为本群）')
+    .action(async ({ session, options }) => {
+      if (! ctx.echarts) return '此指令需要 echarts 服务'
+
+      if (! session.guildId && ! options.guild) return '请在群内调用'
+      const gid = options.guild ?? session.gid
+
+      // TODO: optimize
+      const recs = await ctx.database
+        .select('w-repeat-record')
+        .where({ gid })
+        .project([ 'startTime' ])
+        .execute()
+
+      const timeMat: Record<string, Record<string, number>> = Object.fromEntries(
+        Array.from({ length: 24 }).map((_, i) => [
+          i,
+          Object.fromEntries(Array.from({ length: 7 }).map((_, j) => [j, 0]))
+        ])
+      )
+
+      recs.forEach(({ startTime }) => {
+        const time = dayjs(startTime)
+        const day = time.day()
+        const hour = time.hour()
+        timeMat[hour][day] ++
+      })
+
+      const data = Object
+        .entries(timeMat)
+        .flatMap(([ hour, dayRow ]) => Object
+          .entries(dayRow)
+          .map(([ day, count ]) => [ + hour, + day, count ])
+        )
+
+      const eh = ctx.echarts.createChart(24 * 30 + 100, 7 * 30 + 120, {
+        xAxis: {
+          type: 'category',
+          data: Array.from({ length: 24 }).map((_, i) => `0${i}`.slice(-2)),
+          splitArea: { show: true }
+        },
+        yAxis: {
+          type: 'category',
+          data: [ 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat' ],
+          splitArea: { show: true }
+        },
+        visualMap: {
+          min: 0,
+          max: Math.max(...data.map(it => it[2])),
+          calculable: true,
+          show: false
+        },
+        series: {
+          type: 'heatmap',
+          silent: true,
+          label: { show: true },
+          data
+        },
+        backgroundColor: '#fff'
+      })
+
+      return eh.export()
+    })
+
+  ctx.command('repeat.graph.top-calendar [month:string]', '查看群复读排行日历')
+    .alias('repeat.graph.topc')
+    .option('guild', '-g <guild:channel> 指定群（默认为本群）')
+    .option('type', '-t <type> 排行榜类型，可以为 r(epeater) / (s)tarter / i(nterrupter) / a(ll)，默认为 all', {
+      type: /^(r|repeater|s|starter|i|interrupter|a|all)$/,
+      fallback: 'all'
+    })
+    .option('avatar', '-a 使用头像', { fallback: true })
+    .option('avatar', '-A 不使用头像', { value: false })
+    .action(async ({ session, options }, month) => {
+      if (! ctx.echarts) return '此指令需要 echarts 服务'
+
+      if (! session.guildId && ! options.guild) return '请在群内调用'
+      const gid = options.guild ?? session.gid
+
+      const date = month ? dayjs(month, 'YYYY-MM', true) : dayjs()
+      if (! date.isValid()) return `${month} 不是合法的月份，月份格式应为 YYYY-MM`
+      month = date.format('YYYY-MM')
+
+      const days = getDaysOfMonth(date)
+      const today = date.format('DD')
+
+      type TopType = 'repeater' | 'starter' | 'interrupter'
+      const topTypeText = {
+        starter: '发起者',
+        repeater: '参与者',
+        interrupter: '打断者'
+      } satisfies Record<TopType, string>
+
+      const getCalendar = async (topType: TopType): Promise<{
+        output: string,
+        dataToUpsert: Update<RepeatDay>[]
+      }> => {
+        const idKey = `top${capitalize(topType)}Id` as const
+        const countKey = `top${capitalize(topType)}Count` as const
+
+        const dataExists = await ctx.database
+          .select('w-repeat-calendar')
+          .where({
+            gid,
+            month: 'YYYY-MM',
+            day: { $ne: today },
+            [idKey]: { $ne: null }
+          })
+          .project({
+            month: row => row.month,
+            day: row => row.day,
+            id: row => row[idKey],
+            count: row => row[countKey]
+          })
+          .execute()
+        const missingDays = exclude(days, dataExists.map(rec => rec.month))
+
+        let maxCount = 0
+        const [ memberDict, [ dataCreated, dataToUpsert ] ] = await Promise.all([
+          getMemberDict(session, gid.split(':')[1]),
+          unzipPromise(Promise.all(missingDays.map(async day => {
+            const date = dayjs(`${month}-${day}`)
+            const start = + date.startOf('day')
+            const end = + date.endOf('day')
+            const recs = await ctx.database.get('w-repeat-record', {
+              gid,
+              startTime: { $gte: start, $lte: end }
+            })
+            if (! recs.length) return [
+              { month, day, id: null, count: null },
+              { month, day }
+            ]
+            const candidatorDict: Record<string, number> = {}
+            const inc = safeInc(candidatorDict)
+            recs.forEach(rec => {
+              if (topType === 'repeater') rec.senders.forEach(inc)
+              else if (topType === 'starter') inc(rec.senders[0])
+              else inc(rec.interrupter)
+            })
+            const [ [ id, count ] ] = Object
+              .entries(candidatorDict)
+              .sort(([, count1 ], [, count2 ]) => count2 - count1)
+            if (count > maxCount) maxCount = count
+            return [
+              { month, day, id, count },
+              { month, day, [idKey]: id, [countKey]: count }
+            ] as const
+          })))
+        ])
+
+        const data = [ ...dataExists, ...dataCreated ]
+
+        const CELL_SIZE = 80
+
+        const eh = ctx.echarts.createChart(700, 500, {
+          backgroundColor: '#fff',
+          calendar: {
+            orient: 'vertical',
+            yearLabel: {
+              show: false
+            },
+            monthLabel: {
+              nameMap: 'cn',
+              margin: 20,
+              fontSize: 20,
+              fontWeight: 600
+            },
+            dayLabel: {
+              nameMap: [ 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat' ],
+              firstDay: 1,
+              margin: 20,
+              fontSize: 17
+            },
+            cellSize: CELL_SIZE,
+            range: month
+          },
+          visualMap: {
+            min: 0,
+            max: maxCount,
+            calculable: true,
+            show: false
+          },
+          series: {
+            type: 'custom',
+            coordinateSystem: 'calendar',
+            renderItem: (_, api) => {
+              const day = api.value('day') as string
+              const id = api.value('id') as string
+              const count = api.value('count') as number
+              const [ x, y ] = api.coord(`${month}-${day}`)
+              
+              type CustomSeriesOption = echarts.RegisteredSeriesOption['custom']
+              type CustomGroupOption = ReturnType<CustomSeriesOption['renderItem']> & { type: 'group' }
+
+              const children: CustomGroupOption['children'] = [
+                id ? {
+                  type: 'image',
+                  style: {
+                    x: x - CELL_SIZE / 2 + 4,
+                    y: y - CELL_SIZE / 2 + 4,
+                    width: CELL_SIZE - 8,
+                    height: CELL_SIZE - 8,
+                    image: memberDict[id]?.user?.avatar,
+                    shadowColor: '#73b9bc',
+                    shadowBlur: day === today ? 4 : 0,
+                  }
+                } : null,
+                id ? {
+                  type: 'text',
+                  style: {
+                    text: String(count),
+                    x,
+                    y: y + CELL_SIZE / 2 - 20 - 2,
+                    align: 'center',
+                    fill: '#000',
+                    stroke: '#fff',
+                    lineWidth: 2,
+                    textFont: api.font({ fontSize: 16, fontWeight: 'bold' })
+                  }
+                } : null,
+                {
+                  type: 'text',
+                  style: {
+                    x: x - CELL_SIZE / 2 + 2,
+                    y: y - CELL_SIZE / 2 + 2,
+                    text: day,
+                    fill: '#000',
+                    textFont: api.font({ fontSize: 16 })
+                  }
+                }
+              ]
+
+              return {
+                type: 'group',
+                children: children.filter(child => child !== null)
+              }
+            },
+            dimensions: [
+              undefined,
+              { name: 'day', type: 'ordinal' },
+              { name: 'id', type: 'ordinal' },
+              { name: 'count', type: 'int' }
+            ],
+            data: data.map(({ day, id, count }) =>
+              [ undefined, day, id, count ]
+            )
+          }
+        })
+
+        const topText = topTypeText[topType]
+
+        return {
+          output: `本月群${topText}排行榜：\n` + await eh.export(10000),
+          dataToUpsert
+        }
+      }
+
+      // TODO: Optimize
+      if (options.type === 'a' || options.type === 'all') {
+        const outputs = await Promise.all(([ 'repeater', 'starter', 'interrupter' ] satisfies TopType[])
+          .map(async (topType) => {
+            const { output, dataToUpsert } = await getCalendar(topType)
+            await ctx.database.upsert('w-repeat-calendar', dataToUpsert)
+            return output
+          })
+        )
+        const output = h('message', { forward: true }, outputs.map(output => h('message', h.parse(output))))
+        return output
+      }
+
+      const topType = ({
+        repeater: 'repeater',
+        r: 'repeater',
+        starter: 'starter',
+        s: 'starter',
+        interrupter: 'interrupter',
+        i: 'interrupter'
+      } as const)[options.type]
+
+      const { output, dataToUpsert } = await getCalendar(topType)
+      await ctx.database.upsert('w-repeat-calendar', dataToUpsert.map(day => ({
+        ...day,
+        gid
+      })))
+      return output
+    })
+
+  ctx.command('repeat.record <id:posint>', '查看某次复读详情')
+    .alias('repeat.r')
+    .option('all-senders', '-a 显示所有参与者')
+    .option('suspension', '-s 显示挂起详情')
+    .option('delete', '-d 删除此复读详情', { authority: 4 })
+    .option('ocr', '-o 识别图片中文字')
+    .option('segmentation', '--seg 对复读消息分词')
+    .action(async ({ session, options }, id) => {
+      const [ rec ] = await ctx.database.get('w-repeat-record', { id })
+      if (! rec) return `未找到复读 #${id}。`
+
+      const guildId = rec.gid.split(':')[1]
+      const memberDict = await getMemberDict(session, guildId)
+      const guild = await session.bot.getGuild(guildId)
+
+      let content: string
+
+      if (options.delete) {
+        await ctx.database.remove('w-repeat-record', { id })
+        content = '[已删除]'
+      }
+      else {
+        content = unescapeMessage(rec)
+        if (options.ocr) {
+          if (tesseractWorker) await updateImageText(rec)
+          else return 'Tesseract 未加载，无法识别图片中文字'
+        }
+        if (options.segmentation) {
+          if (jieba) await updateWords(rec)
+          else return 'Jieba 未加载，无法分词'
+        }
+      }
+
+      const sendersText = options['all-senders']
+        ? rec.senders.map(uid => getMemberName(memberDict, uid)).join('，')
+        : `${rec.senders.length} 个`
+
+      const suspensionText = rec.suspensions?.length
+        ? options.suspension
+          ? '\n' + rec.suspensions
+            .map(({ suspendTime, resumeTime }, i) =>
+              `${i + 1}. 挂起时间：${timeText(suspendTime)}，恢复时间：${timeText(resumeTime)}`
+            )
+            .join('\n')
+          : `挂起并恢复了 ${rec.suspensions.length} 次`
+        : '无'
+
+      return dedent`
+        复读 #${id} 详情
+        群：${guild.name}${guildId === session.guildId ? '（本群）' : ''}
+        发起者：${getMemberName(memberDict, rec.senders[0])}
+        发起时间：${timeText(rec.startTime)}
+        打断者：${getMemberName(memberDict, rec.interrupter)}
+        参与者：${sendersText}
+        打断时间：${timeText(rec.endTime)}
+        挂起情况：${suspensionText}
+        内容：${options.delete ? '[已删除]' : content}`
+        + (rec.images.length || options.ocr
+          ? `\n图片识别结果：${options.ocr ? '[新识别]' : ''}\n${rec.images
+            .map(({ text }, i) => `${i + 1}. ${text.trim() || '[未识别到文字]'}`)
+            .join('\n')
+          }`
+          : ''
+        )
+        + (rec.words
+          ? `\n分词结果：${rec.words.map(({ word, tag }) => `${word} [${tag}]`).join(', ')}`
+          : ''
+        )
+    })
+
+  ctx.command('repeat.debug', '复读调试', { hidden: true })
+
+  ctx.command('repeat.debug.eval <code:text>', '在本插件作用域中运行 JavaScript', { authority: 4 })
+    .action(async (_, code) => {
+      try {
+        return JSON.stringify(await eval(code), null, 2)
+      }
+      catch (error) {
+        return String(error)
+      }
+    })
+
+  ctx.command('repeat.debug.runtime', '获取当前复读运行时', { authority: 2 })
+    .action(({ session }) => '当前运行时：\n'
+      + h.escape(JSON.stringify(runtimes[session.gid], null, 2))
+    )
+
+  ctx.command('repeat.debug.runtime.clear', '清除复读运行时', { authority: 2 })
+    .option('all', '-a 清除所有')
+    .action(async ({ session: { gid }, options: { all } }) => {
+      const gids = all ? Object.keys(runtimes) : [gid]
+      gids.forEach(gid => delete runtimes[gid])
+
+      return `清除了 ${gids.length} 个运行时`
+    })
+
+  ctx.command('repeat.debug.runtime.list', '获取复读运行时列表', { authority: 2 })
+    .action(() => '运行时列表：' + Object.keys(runtimes).join(', '))
+
+  ctx.command('repeat.admin', '复读管理')
+    .alias('repeat.a')
+
+  ctx.command('repeat.admin.settings [key:string] [value:string]', '管理群复读设置')
+    .action(async ({ session, options }, key, value) => {
+      const [ member, user ] = await Promise.all([
+        session.bot.getGuildMember(session.guildId, session.userId),
+        session.observeUser([ 'authority' ]),
+      ])
+      if (user.authority < 3 && ! member.roles.some(role => [ 'admin', 'owner' ].includes(role))) {
+        return '只有群主、管理员或 Koishi 管理员（权限等级 ≥ 3）可以管理群复读设置。'
+      }
+
+      const settings = config.guildSettings[session.gid] ??= config.globalSettings
+
+      const displaySettingItem = (symbol: string, desc) => (key: string) => (
+        `${key}${desc ? ` /* ${RepeatSettings.dict[key].meta.description} */` : ''}${symbol}${JSON.stringify(settings[key])}`
+      )
+
+      if (! key && ! value) {
+        return (
+          '群复读设置：{\n' +
+          Object
+            .keys(RepeatSettings.dict)
+            .map(key => '  ' + displaySettingItem(': ', true)(key))
+            .join('\n') +
+          '\n}'
+        )
+      }
+
+      if (! (key in RepeatSettings.dict)) {
+        return `未知设置项 '${key}'`
+      }
+
+      if (! value) {
+        return `群复读设置：${displaySettingItem(' == ', false)(key)}`
+      }
+
+      try {
+        const validated = RepeatSettings.dict[key](JSON.parse(value))
+        settings[key] = validated
+        ctx.scope.update(config)
+        return `已修改群复读设置：${displaySettingItem(' = ', false)(key)}`
+      }
+      catch {
+        return `无法解析设置值 '${value}'`
+      }
+    })
+    
+  ctx.command('repeat.admin.regen-user-table', '重建复读用户表', { authority: 4 })
+    .action(async ({ session }) => {
+      await session.send('正在根据复读记录重建用户数据表……')
+      await ctx.database.remove('w-repeat-user', {})
+      const recs = await ctx.database.get('w-repeat-record', {})
+      const users: Record<string, RepeatUser> = {}
+      const getUser = (uid: string): RepeatUser => users[uid] ??= {
+        uid,
+        repeatTime: 0,
+        repeatCount: 0,
+        beRepeatedTime: 0,
+        beRepeatedCount: 0,
+        interruptTime: 0
+      }
+      recs.forEach(rec => {
+        const starter = getUser(rec.senders[0])
+        starter.beRepeatedTime ++
+        starter.beRepeatedCount += rec.senders.length - 1
+
+        const counted: Record<string, boolean> = {}
+        rec.senders.slice(1).forEach(uid => {
+          const user = getUser(uid)
+          user.repeatCount ++
+          if (! counted[uid]) {
+            counted[uid] = true
+            user.repeatTime ++
+          }
+        })
+
+        getUser(rec.interrupter).interruptTime ++
+      })
+      const writeResult = await ctx.database.upsert('w-repeat-user', () => Object.values(users))
+      return `已重建 ${writeResult.inserted} 条用户数据`
+    })
+
+  ctx.command('repeat.admin.ocr-all', '识别所有消息图片', { authority: 4 })
+    .action(({ session }) => profile(async () => {
+      if (! tesseractWorker) return 'Tesseract 未加载，无法识别图片中文字'
+      await session.send('开始查询数据库……')
+      const recs = await ctx.database.get('w-repeat-record', row => $.gt($.length(row.images), 0))
+      const imageCount = recs.reduce((count, rec) => count + rec.images.filter(x => x !== null).length, 0)
+      await session.send(`正在识别 ${recs.length} 条复读记录中的 ${imageCount} 张图片……`)
+      await Promise.all(recs.map(updateImageText))
+    }))
+
+  ctx.command('repeat.admin.segmentation-all', '对所有消息分词', { authority: 4 })
+    .action(({ session }) => profile(async () => {
+      if (! jieba) return 'Jieba 未加载，无法分词'
+      await session.send('正在清空分词表……')
+      await ctx.database.remove('w-repeat-word', {})
+      await session.send('开始查询数据库…… ')
+      const recs = await ctx.database.get('w-repeat-record', {})
+      await session.send(`正在对 ${recs.length} 条复读记录分词……`)
+      const wordDict: Record<string, number> = {}
+      const incWord = safeInc(wordDict)
+      await Promise.all(recs.map(async rec => {
+        const words = await updateWords(rec)
+        words.forEach(({ tag, word }) => incWord(`${rec.gid}#${tag}#${word}`))
+      }))
+      await session.send('正在写入分词表……')
+      const words = Object.entries(wordDict).map(([ gidTagWord, count ]) => {
+        const [ gid, tag, word ] = splitWithLimit(gidTagWord, '#', 3)
+        return { gid, word, tag, count }
+      })
+      await ctx.database.upsert('w-repeat-word', words)
+    }))
+
+  ctx.command('repeat.admin.migrate-guild <from:channel> <to:channel>', '迁移群复读记录', { authority: 4 })
+    .action(async (_, from, to) => {
+      const res = await ctx.database.set('w-repeat-record', { gid: from }, { gid: to })
+      return `成功从 ${from} 迁移了 ${res.modified} 条复读记录到 ${to}。`
+    })
+
+  // 回收副作用
+  ctx.on('dispose', () => {
+    // 终止 tesseract Worker
+    tesseractWorker?.terminate()
+  })
 }
